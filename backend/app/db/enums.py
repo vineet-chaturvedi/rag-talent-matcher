@@ -25,6 +25,7 @@ class ResumeStatus(StrEnum):
     # resume through these, so after a crash/restart we know exactly where it stopped.
     QUEUED = "queued"
     PARSING = "parsing"         # reading text from PDF/DOCX
+    PARSED = "parsed"           # text extracted, waiting for LLM extraction (Step 5)
     EXTRACTING = "extracting"   # LLM turns text into structured data
     EMBEDDING = "embedding"     # chunks -> vectors
     READY = "ready"             # searchable

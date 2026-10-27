@@ -1,0 +1,17 @@
+employee_code,full_name,email,department,designation,location,date_joined,availability_status,allocation_percent,available_from,current_project_name,manager_name
+EMP-1001,Ananya Iyer,ananya.iyer@nimbus.example.com,Engineering,Senior Software Engineer,Pune,2021-06-14,available,0,2026-11-01,,Divya Krishnan
+EMP-1002,Rohan Mehta,rohan.mehta@nimbus.example.com,Engineering,Software Engineer II,Bengaluru,2022-03-01,partial,50,2026-11-10,Payments Gateway,Vikram Singh
+EMP-1003,Priya Nair,priya.nair@nimbus.example.com,Cloud & Platform,Senior DevOps Engineer,Pune,2020-09-21,available,0,2026-11-01,,Siddharth Bose
+EMP-1004,Arjun Reddy,arjun.reddy@nimbus.example.com,Engineering,Senior Software Engineer,Hyderabad,2019-11-04,allocated,100,2027-01-15,Retail Portal,Vikram Singh
+EMP-1005,Sneha Kulkarni,sneha.kulkarni@nimbus.example.com,Engineering,Software Engineer II,Pune,2021-01-11,available,0,2026-11-01,,Divya Krishnan
+EMP-1006,Vikram Singh,vikram.singh@nimbus.example.com,Engineering,Principal Engineer,Noida,2017-02-06,partial,50,2026-12-01,Payments Gateway,CTO Office
+EMP-1007,Kavya Menon,kavya.menon@nimbus.example.com,Data & AI,Senior Data Scientist,Bengaluru,2022-07-18,available,0,2026-11-01,,Fatima Shaikh
+EMP-1008,Aditya Joshi,aditya.joshi@nimbus.example.com,Data & AI,Senior Data Engineer,Pune,2020-04-13,allocated,100,2027-03-01,Customer 360,Fatima Shaikh
+EMP-1009,Meera Pillai,meera.pillai@nimbus.example.com,Quality Engineering,Senior QA Engineer,Chennai,2021-08-02,available,0,2026-11-01,,Neha Gupta
+EMP-1010,Karthik Rao,karthik.rao@nimbus.example.com,Engineering,Software Engineer I,Pune,2025-01-06,available,0,2026-11-01,,Ananya Iyer
+EMP-1011,Neha Gupta,neha.gupta@nimbus.example.com,Engineering,Lead Engineer,Gurugram,2018-05-21,available,0,2026-11-15,,Vikram Singh
+EMP-1012,Siddharth Bose,siddharth.bose@nimbus.example.com,Cloud & Platform,Cloud Architect,Kolkata,2016-10-03,partial,70,2026-12-15,Bank Modernisation,CTO Office
+EMP-1013,Fatima Shaikh,fatima.shaikh@nimbus.example.com,Data & AI,Lead ML Engineer,Mumbai,2021-02-15,partial,50,2026-11-15,Fraud Detection,CTO Office
+EMP-1014,Rahul Verma,rahul.verma@nimbus.example.com,Engineering,Senior Software Engineer,Bengaluru,2022-09-12,available,0,2026-11-01,,Vikram Singh
+EMP-1015,Divya Krishnan,divya.krishnan@nimbus.example.com,Engineering,Engineering Manager,Pune,2015-07-01,available,0,2026-11-01,,CTO Office
+EMP-1016,Manoj Das,manoj.das@nimbus.example.com,Engineering,Software Engineer I,Kolkata,2026-09-01,available,0,2026-11-01,,Siddharth Bose

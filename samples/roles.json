@@ -1,0 +1,69 @@
+[
+  {
+    "project": "Insurance Claims Portal v2",
+    "client_name": "Internal",
+    "title": "Senior Backend Developer (Django)",
+    "location": "Pune (hybrid)",
+    "allocation_percent": 100,
+    "start_date": "2026-12-01",
+    "headcount": 1,
+    "description": "We need a senior backend developer to rebuild the claims processing APIs. Must have strong Python and Django / Django REST Framework, solid PostgreSQL (query tuning, indexing) and REST API design, with at least 5 years of backend experience. Nice to have: Celery for background jobs, Docker, AWS. Full-time on the project from 1 December, Pune-based team preferred.",
+    "expected_ranking": [
+      "EMP-1001",
+      "EMP-1002",
+      "EMP-1015",
+      "EMP-1010"
+    ],
+    "notes": [
+      "EMP-1001 Ananya: perfect fit (7y Django, PostgreSQL tuning, Celery), available, Pune.",
+      "EMP-1002 Rohan: strong Python APIs but mostly FastAPI/Flask; Django only basic; 50% allocated.",
+      "EMP-1015 Divya: deep Django history, but hands-on ended in 2019 -> recency should lower her.",
+      "EMP-1010 Karthik: right stack, Pune, available, but only 1.5 years (fails the 5-year must-have).",
+      "TRAP EMP-1004 Arjun: lists 'Django' in skills, but only ~1 year AND allocated until Jan 2027.",
+      "TRAP EMP-1014 Rahul: Python + PostgreSQL but no Django; should rank below the four above."
+    ]
+  },
+  {
+    "project": "Retail Platform Migration",
+    "client_name": "Northwind Retail (fictional)",
+    "title": "DevOps / Platform Engineer (Kubernetes)",
+    "location": "Any",
+    "allocation_percent": 100,
+    "start_date": "2026-11-15",
+    "headcount": 1,
+    "description": "Platform engineer to migrate 60 services to Kubernetes on AWS. Must have hands-on Kubernetes in production, Terraform, CI/CD pipelines and AWS. Nice to have: Helm, ArgoCD, Prometheus/Grafana monitoring. Start mid-November, full allocation.",
+    "expected_ranking": [
+      "EMP-1003",
+      "EMP-1013",
+      "EMP-1012",
+      "EMP-1006"
+    ],
+    "notes": [
+      "EMP-1003 Priya: ideal (EKS, Terraform, ArgoCD, CKA). TEST: her resume says 'k8s', never 'Kubernetes', and it is a TWO-COLUMN PDF.",
+      "EMP-1013 Fatima: Kubernetes + Terraform + AWS from MLOps work; only 50% available.",
+      "EMP-1012 Siddharth: strong Terraform + AKS but Azure, not AWS; 70% allocated.",
+      "EMP-1006 Vikram: 3 years running services on Kubernetes, but a Java developer, 50% allocated.",
+      "EMP-1014 Rahul also mentions k8s/Helm as a developer: acceptable in 5th place."
+    ]
+  },
+  {
+    "project": "Internal Knowledge Assistant",
+    "client_name": "Internal",
+    "title": "GenAI / RAG Engineer",
+    "location": "Any",
+    "allocation_percent": 50,
+    "start_date": "2026-11-01",
+    "headcount": 1,
+    "description": "Half-time role building an internal knowledge assistant. Must have Python, hands-on experience with LLMs and retrieval-augmented generation (RAG) using vector databases, and NLP fundamentals. Nice to have: LangChain, FastAPI, Docker, LLM evaluation.",
+    "expected_ranking": [
+      "EMP-1007",
+      "EMP-1013"
+    ],
+    "notes": [
+      "EMP-1007 Kavya: direct RAG + vector DB + evaluation experience, available.",
+      "EMP-1013 Fatima: LLM serving/MLOps, 50% free which matches the 50% role.",
+      "Everyone else is a weak match. TRAP: EMP-1002 Rohan and EMP-1010 Karthik know FastAPI (a nice-to-have) but have no LLM/RAG experience; they must NOT outrank the two above.",
+      "EMP-1008 Aditya (data engineer) is relevant-ish but 100% allocated until March 2027."
+    ]
+  }
+]

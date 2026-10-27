@@ -7,9 +7,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import dev, health
+from app.api import dev, employees, health, resumes
 from app.config import get_settings
 from app.db.session import engine, init_db
+from app.ingestion.worker import IngestionWorker
 from app.llm.ollama_client import OllamaClient
 
 settings = get_settings()
@@ -24,20 +25,28 @@ logger = logging.getLogger("app")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # ---- startup ----
-    await init_db()  # create any missing tables
+    await init_db()
     logger.info("Database ready (%s)", settings.database_url)
     app.state.ollama = OllamaClient(settings.ollama_base_url, settings.ollama_timeout_seconds)
+
+    app.state.worker = None
+    if settings.worker_enabled:
+        app.state.worker = IngestionWorker(settings)
+        app.state.worker.start()
+
     logger.info("Started %s (%s) | Ollama at %s", settings.app_name, settings.environment, settings.ollama_base_url)
     yield
     # ---- shutdown ----
+    if app.state.worker is not None:
+        await app.state.worker.stop()
     await app.state.ollama.close()
-    await engine.dispose()  # close all pooled database connections cleanly
+    await engine.dispose()
     logger.info("Shutdown complete")
 
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.2.0",
+    version="0.3.0",
     description="RAG system that matches employees to internal project roles using local LLMs (Ollama).",
     lifespan=lifespan,
 )
@@ -51,6 +60,8 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(employees.router)
+app.include_router(resumes.router)
 if settings.is_development:
     app.include_router(dev.router)
 
