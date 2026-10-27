@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     quality_llm_model: str = "qwen2.5:7b"
     llm_num_ctx: int = 8192
 
+    # ---- Database ----
+    database_url: str = "sqlite+aiosqlite:///./data/app.db"
+    db_echo: bool = False
+
     # ---- Frontend ----
     cors_origins: list[str] = ["http://localhost:3000"]
 

@@ -1,6 +1,5 @@
 """
-Entry point. Run with:   uvicorn app.main:app --reload --port 8000
-   app.main -> the file app/main.py      :app -> the FastAPI object named `app` inside it
+Entry point. Run with:   uvicorn app.main:app --reload --port 8010
 """
 import logging
 from contextlib import asynccontextmanager
@@ -10,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import dev, health
 from app.config import get_settings
+from app.db.session import engine, init_db
 from app.llm.ollama_client import OllamaClient
 
 settings = get_settings()
@@ -23,23 +23,25 @@ logger = logging.getLogger("app")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # ---- runs ONCE at startup ----
+    # ---- startup ----
+    await init_db()  # create any missing tables
+    logger.info("Database ready (%s)", settings.database_url)
     app.state.ollama = OllamaClient(settings.ollama_base_url, settings.ollama_timeout_seconds)
     logger.info("Started %s (%s) | Ollama at %s", settings.app_name, settings.environment, settings.ollama_base_url)
-    yield  # <- the app serves requests while paused here
-    # ---- runs ONCE at shutdown ----
+    yield
+    # ---- shutdown ----
     await app.state.ollama.close()
+    await engine.dispose()  # close all pooled database connections cleanly
     logger.info("Shutdown complete")
 
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.1.0",
-    description="RAG system that matches candidates to jobs using local LLMs (Ollama).",
+    version="0.2.0",
+    description="RAG system that matches employees to internal project roles using local LLMs (Ollama).",
     lifespan=lifespan,
 )
 
-# Allow the Next.js dev server (localhost:3000) to call this API from the browser.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -48,7 +50,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Routers group related endpoints; each file in app/api/ contributes one.
 app.include_router(health.router)
 if settings.is_development:
     app.include_router(dev.router)
