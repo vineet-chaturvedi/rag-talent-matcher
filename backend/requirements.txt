@@ -1,0 +1,9 @@
+# Web framework + server
+fastapi>=0.115
+uvicorn[standard]>=0.30
+
+# Settings from .env files
+pydantic-settings>=2.4
+
+# Async HTTP client (talks to Ollama)
+httpx>=0.27

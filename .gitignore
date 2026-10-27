@@ -1,0 +1,13 @@
+# ---- Python ----
+backend/.venv/
+__pycache__/
+*.pyc
+
+# ---- Secrets & local data (resumes are personal data, never commit them) ----
+backend/.env
+backend/data/
+
+# ---- Node / Next.js (Step 11) ----
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
