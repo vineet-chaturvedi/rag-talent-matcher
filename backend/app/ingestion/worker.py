@@ -7,7 +7,7 @@ so the queue survives restarts and crashes.
   Stage      waits in   works as     on success   (Step)
   parse      QUEUED     PARSING      PARSED       Step 4: file -> plain text
   extract    PARSED     EXTRACTING   EXTRACTED    Step 5: plain text -> structured profile (LLM)
-  (Step 6 adds: embed  EXTRACTED -> EMBEDDING -> READY)
+  embed      EXTRACTED  EMBEDDING    READY        Step 6: chunks -> vectors -> ChromaDB
 """
 import asyncio
 import logging
@@ -23,6 +23,7 @@ from app.db.session import SessionLocal
 from app.extraction.extractor import extract_profile
 from app.ingestion.text_extraction import ExtractionError, extract_text
 from app.llm.ollama_client import OllamaClient, OllamaError
+from app.services.indexing import index_resume
 from app.services.profiles import save_profile
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ class Stage:
 STAGES = [
     Stage("parse", ResumeStatus.QUEUED, ResumeStatus.PARSING),
     Stage("extract", ResumeStatus.PARSED, ResumeStatus.EXTRACTING),
+    Stage("embed", ResumeStatus.EXTRACTED, ResumeStatus.EMBEDDING),
 ]
 
 
@@ -151,6 +153,8 @@ class IngestionWorker:
                 await self._parse(job)
             elif job.stage.name == "extract":
                 await self._extract(job)
+            elif job.stage.name == "embed":
+                await self._embed(job)
         except ExtractionError as exc:
             # The file itself is the problem (scanned, corrupt...): retrying won't help.
             logger.warning("Resume %s failed permanently: %s", job.id, exc)
@@ -194,6 +198,10 @@ class IngestionWorker:
         async with SessionLocal() as session:
             if not await save_profile(session, job.id, outcome):
                 logger.info("Resume %s was deleted during extraction; result discarded", job.id)
+
+    async def _embed(self, job: Claimed) -> None:
+        if not await index_resume(job.id, self.ollama, self.settings):
+            logger.info("Resume %s was deleted during embedding; nothing indexed", job.id)
 
     async def _update(self, resume_id: int, **values) -> None:
         async with SessionLocal() as session:

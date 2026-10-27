@@ -46,6 +46,14 @@ class Settings(BaseSettings):
     extraction_max_output_tokens: int = 2048   # hard cap on the JSON answer length
     extraction_max_input_chars: int = 16000    # ~4,000 tokens; longer resumes are truncated (with a warning)
 
+    # ---- Chunking, embeddings & vector store (Step 6) ----
+    chroma_dir: str = "./data/chroma"               # ChromaDB's files (git-ignored, rebuildable)
+    chroma_collection: str = "resume_chunks"
+    chunk_max_chars: int = 1200                     # ~300 tokens: one focused topic per chunk
+    chunk_overlap_chars: int = 150                  # text repeated between neighbouring chunks
+    embed_batch_size: int = 16                      # chunks sent to Ollama per /api/embed call
+    anonymize_chunks: bool = True                   # remove name, email, phone from indexed text
+
     # ---- Frontend ----
     cors_origins: list[str] = ["http://localhost:3000"]
 

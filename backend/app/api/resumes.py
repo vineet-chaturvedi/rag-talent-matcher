@@ -8,8 +8,10 @@ Resume endpoints:
   GET    /api/resumes/{id}/profile     the structured profile extracted by the LLM (Step 5)
   POST   /api/resumes/{id}/retry       re-queue a failed resume
   POST   /api/resumes/reextract        send all resumes back to LLM extraction (after a model/prompt change)
+  POST   /api/resumes/reembed          rebuild all chunks + vectors (after a chunking/embedding change)
   DELETE /api/resumes/{id}             delete one resume version (file + rows)
 """
+import asyncio
 from datetime import date
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
@@ -23,8 +25,10 @@ from app.db.enums import ResumeStatus
 from app.db.models import Employee, Resume, ResumeSkill
 from app.ingestion.storage import InvalidFileError
 from app.ingestion.worker import IngestionWorker
+from app.rag.vector_store import get_vector_store
 from app.schemas.profile import ProfileOut
 from app.schemas.resume import BulkUploadResult, QueueStats, ResumeDetail, ResumeOut, UploadItemResult
+from app.services.indexing import requeue_for_embedding
 from app.services.resumes import (
     DuplicateResumeError, add_resume, delete_resume, employee_code_from_filename, requeue_for_extraction,
     retry_resume,
@@ -124,7 +128,8 @@ async def queue_stats(
     )).all()
     by_status = {s.value: 0 for s in ResumeStatus} | {s: n for s, n in rows}
     return QueueStats(total=sum(by_status.values()), by_status=by_status,
-                      worker_running=worker is not None and worker.running)
+                      worker_running=worker is not None and worker.running,
+                      vector_count=await asyncio.to_thread(get_vector_store().count))
 
 
 @router.post("/api/resumes/reextract")
@@ -133,6 +138,13 @@ async def reextract_all(
     worker: IngestionWorker | None = Depends(get_worker),
 ):
     count = await requeue_for_extraction(db)
+    _wake(worker)
+    return {"requeued": count}
+
+
+@router.post("/api/resumes/reembed")
+async def reembed_all(worker: IngestionWorker | None = Depends(get_worker)):
+    count = await requeue_for_embedding()
     _wake(worker)
     return {"requeued": count}
 

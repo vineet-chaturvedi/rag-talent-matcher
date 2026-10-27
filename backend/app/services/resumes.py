@@ -1,6 +1,7 @@
 """
 Business logic for resumes: adding an uploaded file, deleting, retrying.
 """
+import asyncio
 import re
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from app.config import Settings
 from app.db.enums import ResumeStatus
 from app.db.models import Employee, Resume
 from app.ingestion.storage import build_storage_path, delete_file, save_file, validate_resume_file
+from app.rag.vector_store import get_vector_store
 
 
 class DuplicateResumeError(Exception):
@@ -31,6 +33,10 @@ async def add_resume(
     existing = await session.scalar(select(Resume).where(Resume.file_hash == file.sha256))
     if existing is not None:
         raise DuplicateResumeError(existing)
+
+    previous_ids = list((await session.scalars(
+        select(Resume.id).where(Resume.employee_id == employee.id, Resume.is_current.is_(True))
+    )).all())
 
     path = build_storage_path(Path(settings.upload_dir), employee.employee_code, file)
     save_file(path, data)
@@ -59,6 +65,10 @@ async def add_resume(
         delete_file(path)
         raise
     await session.refresh(resume)  # load the values the database filled in (created_at, ...)
+
+    # The old version is no longer current: remove its vectors so search never finds outdated text.
+    for old_id in previous_ids:
+        await asyncio.to_thread(get_vector_store().delete_resume, old_id)
     return resume
 
 
@@ -73,7 +83,7 @@ def employee_code_from_filename(filename: str) -> str | None:
 
 async def delete_resume(session: AsyncSession, resume: Resume) -> None:
     """Delete one resume version: database rows (cascade) + the file. Promote the newest remaining version."""
-    employee_id, was_current, path = resume.employee_id, resume.is_current, resume.stored_path
+    resume_id, employee_id, was_current, path = resume.id, resume.employee_id, resume.is_current, resume.stored_path
     await session.delete(resume)   # cascades to profile, skills, chunks... (Steps 5-6)
     await session.flush()
     if was_current:
@@ -82,8 +92,11 @@ async def delete_resume(session: AsyncSession, resume: Resume) -> None:
         )
         if newest is not None:
             newest.is_current = True
+            if newest.status == ResumeStatus.READY:
+                newest.status = ResumeStatus.EXTRACTED   # its vectors were removed earlier: re-index it
     await session.commit()
     delete_file(path)
+    await asyncio.to_thread(get_vector_store().delete_resume, resume_id)
 
 
 async def retry_resume(session: AsyncSession, resume: Resume) -> Resume:

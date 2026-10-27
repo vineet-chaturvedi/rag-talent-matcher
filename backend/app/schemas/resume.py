@@ -51,3 +51,4 @@ class QueueStats(BaseModel):
     total: int
     by_status: dict[str, int]
     worker_running: bool
+    vector_count: int = 0         # chunks stored in ChromaDB (Step 6)
