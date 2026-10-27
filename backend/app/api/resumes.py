@@ -5,9 +5,13 @@ Resume endpoints:
   GET    /api/resumes                  list (filter by status)
   GET    /api/resumes/stats            queue overview for the admin dashboard
   GET    /api/resumes/{id}             details + extracted text
+  GET    /api/resumes/{id}/profile     the structured profile extracted by the LLM (Step 5)
   POST   /api/resumes/{id}/retry       re-queue a failed resume
+  POST   /api/resumes/reextract        send all resumes back to LLM extraction (after a model/prompt change)
   DELETE /api/resumes/{id}             delete one resume version (file + rows)
 """
+from datetime import date
+
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,12 +20,14 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import get_db, get_worker
 from app.config import Settings, get_settings
 from app.db.enums import ResumeStatus
-from app.db.models import Employee, Resume
+from app.db.models import Employee, Resume, ResumeSkill
 from app.ingestion.storage import InvalidFileError
 from app.ingestion.worker import IngestionWorker
+from app.schemas.profile import ProfileOut
 from app.schemas.resume import BulkUploadResult, QueueStats, ResumeDetail, ResumeOut, UploadItemResult
 from app.services.resumes import (
-    DuplicateResumeError, add_resume, delete_resume, employee_code_from_filename, retry_resume,
+    DuplicateResumeError, add_resume, delete_resume, employee_code_from_filename, requeue_for_extraction,
+    retry_resume,
 )
 
 router = APIRouter(tags=["resumes"])
@@ -121,6 +127,16 @@ async def queue_stats(
                       worker_running=worker is not None and worker.running)
 
 
+@router.post("/api/resumes/reextract")
+async def reextract_all(
+    db: AsyncSession = Depends(get_db),
+    worker: IngestionWorker | None = Depends(get_worker),
+):
+    count = await requeue_for_extraction(db)
+    _wake(worker)
+    return {"requeued": count}
+
+
 @router.get("/api/resumes/{resume_id}", response_model=ResumeDetail)
 async def get_resume(resume_id: int, full_text: bool = False, db: AsyncSession = Depends(get_db)):
     resume = await db.scalar(
@@ -135,6 +151,49 @@ async def get_resume(resume_id: int, full_text: bool = False, db: AsyncSession =
         employee_name=resume.employee.full_name,
         text_length=len(text),
         text=(text if full_text else text[:PREVIEW_CHARS]) or None,
+    )
+
+
+@router.get("/api/resumes/{resume_id}/profile", response_model=ProfileOut)
+async def get_profile(resume_id: int, db: AsyncSession = Depends(get_db)):
+    resume = await db.scalar(
+        select(Resume).where(Resume.id == resume_id).options(
+            selectinload(Resume.employee),
+            selectinload(Resume.profile),
+            selectinload(Resume.experiences),
+            selectinload(Resume.skills).selectinload(ResumeSkill.skill),
+        )
+    )
+    if resume is None:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    if resume.profile is None:
+        raise HTTPException(status_code=404, detail=f"No profile yet (resume status is '{resume.status}').")
+    profile, raw = resume.profile, resume.profile.raw_extraction or {}
+    skills = sorted(resume.skills, key=lambda link: (-(link.years or 0), link.skill.name.lower()))
+    return ProfileOut(
+        resume_id=resume.id,
+        employee_code=resume.employee.employee_code,
+        employee_name=resume.employee.full_name,
+        status=resume.status,
+        extraction_model=profile.extraction_model,
+        headline=profile.headline,
+        summary=profile.summary,
+        total_experience_years=profile.total_experience_years,
+        skills=[
+            {"name": link.skill.name, "category": link.skill.category, "years": link.years,
+             "last_used_year": link.last_used_year, "evidence": link.evidence}
+            for link in skills
+        ],
+        experience=[
+            {"title": e.title, "company": e.company, "start_date": e.start_date, "end_date": e.end_date,
+             "is_current": e.is_current, "description": e.description}
+            for e in sorted(resume.experiences, key=lambda e: e.start_date or date.min, reverse=True)
+        ],
+        education=profile.education or [],
+        certifications=profile.certifications or [],
+        rejected_skills=raw.get("rejected_skills", []),
+        warnings=raw.get("warnings", []),
+        stats=raw.get("stats"),
     )
 
 

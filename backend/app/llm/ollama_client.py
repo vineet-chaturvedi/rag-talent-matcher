@@ -73,15 +73,19 @@ class OllamaClient:
         temperature: float = 0.0,
         num_ctx: int | None = None,
         json_schema: dict | None = None,
+        num_predict: int | None = None,
     ) -> dict[str, Any]:
         """
         messages: [{"role": "system"|"user"|"assistant", "content": "..."}]
-        json_schema: if given, Ollama FORCES the output to match it (used from Step 5 on).
+        json_schema: if given, Ollama FORCES the output to match it (structured outputs).
+        num_predict: maximum number of tokens to generate (protects against endless output).
         Returns Ollama's full response: reply text in ["message"]["content"], plus timing stats.
         """
         options: dict[str, Any] = {"temperature": temperature}
         if num_ctx:
             options["num_ctx"] = num_ctx
+        if num_predict:
+            options["num_predict"] = num_predict
 
         payload: dict[str, Any] = {
             "model": model,

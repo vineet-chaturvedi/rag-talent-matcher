@@ -87,9 +87,30 @@ async def delete_resume(session: AsyncSession, resume: Resume) -> None:
 
 
 async def retry_resume(session: AsyncSession, resume: Resume) -> Resume:
-    """Put a FAILED resume back in the queue with a fresh attempt counter."""
-    resume.status = ResumeStatus.QUEUED
+    """
+    Put a FAILED resume back in the queue with a fresh attempt counter.
+    If its text was already extracted, skip parsing and go straight back to LLM extraction.
+    """
+    resume.status = ResumeStatus.PARSED if resume.raw_text else ResumeStatus.QUEUED
     resume.attempts = 0
     resume.error_message = None
     await session.commit()
     return resume
+
+
+async def requeue_for_extraction(session: AsyncSession) -> int:
+    """
+    Send every current resume that already has text back to the extraction stage.
+    Use after changing the extraction model or prompt. Old profiles are replaced when re-extracted.
+    """
+    result = await session.execute(
+        update(Resume)
+        .where(
+            Resume.is_current.is_(True),
+            Resume.raw_text.is_not(None),
+            Resume.status.in_([ResumeStatus.EXTRACTED, ResumeStatus.READY, ResumeStatus.FAILED]),
+        )
+        .values(status=ResumeStatus.PARSED, attempts=0, error_message=None)
+    )
+    await session.commit()
+    return result.rowcount

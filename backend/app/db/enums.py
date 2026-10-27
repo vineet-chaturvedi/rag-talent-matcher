@@ -21,12 +21,13 @@ class AvailabilityStatus(StrEnum):
 
 
 class ResumeStatus(StrEnum):
-    # The processing pipeline, in order. The background worker (Step 4+) moves each
-    # resume through these, so after a crash/restart we know exactly where it stopped.
-    QUEUED = "queued"
+    # The processing pipeline, in order. The background worker moves each resume through
+    # these, so after a crash/restart we know exactly where it stopped.
+    QUEUED = "queued"           # uploaded, waiting for the worker
     PARSING = "parsing"         # reading text from PDF/DOCX
-    PARSED = "parsed"           # text extracted, waiting for LLM extraction (Step 5)
+    PARSED = "parsed"           # text extracted, waiting for LLM extraction (Step 5)   <- NEW in Step 4
     EXTRACTING = "extracting"   # LLM turns text into structured data
+    EXTRACTED = "extracted"     # structured data saved, waiting for embedding (Step 6)   <- NEW in Step 5
     EMBEDDING = "embedding"     # chunks -> vectors
     READY = "ready"             # searchable
     FAILED = "failed"           # see resumes.error_message

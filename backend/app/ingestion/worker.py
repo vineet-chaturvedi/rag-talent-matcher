@@ -1,12 +1,17 @@
 """
-The background worker: takes resumes from the queue (status = QUEUED) and processes them one at a time.
+The background worker: moves resumes through the pipeline, one resume and one stage at a time.
 
-The "queue" is simply the resumes table: every resume has a status, so the queue survives
-server restarts and crashes. Step 4: QUEUED -> PARSING -> PARSED (or FAILED).
-Steps 5-6 add: PARSED -> EXTRACTING -> EMBEDDING -> READY.
+The "queue" is the resumes table itself: each resume's status says which stage it is waiting for,
+so the queue survives restarts and crashes.
+
+  Stage      waits in   works as     on success   (Step)
+  parse      QUEUED     PARSING      PARSED       Step 4: file -> plain text
+  extract    PARSED     EXTRACTING   EXTRACTED    Step 5: plain text -> structured profile (LLM)
+  (Step 6 adds: embed  EXTRACTED -> EMBEDDING -> READY)
 """
 import asyncio
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 
 from sqlalchemy import func, select, update
@@ -15,16 +20,45 @@ from app.config import Settings
 from app.db.enums import ResumeStatus
 from app.db.models import Resume
 from app.db.session import SessionLocal
+from app.extraction.extractor import extract_profile
 from app.ingestion.text_extraction import ExtractionError, extract_text
+from app.llm.ollama_client import OllamaClient, OllamaError
+from app.services.profiles import save_profile
 
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class Stage:
+    name: str
+    waiting: ResumeStatus     # pick resumes in this status...
+    working: ResumeStatus     # ...mark them with this while processing
+
+
+# Earlier stages first: cheap parsing of new uploads never waits behind slow LLM work.
+STAGES = [
+    Stage("parse", ResumeStatus.QUEUED, ResumeStatus.PARSING),
+    Stage("extract", ResumeStatus.PARSED, ResumeStatus.EXTRACTING),
+]
+
+
+@dataclass
+class Claimed:
+    """A snapshot of the resume we are working on (plain values, so no database session stays open)."""
+    id: int
+    stage: Stage
+    attempt: int
+    path: str
+    mime_type: str
+    raw_text: str | None
+
+
 class IngestionWorker:
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, ollama: OllamaClient):
         self.settings = settings
-        self._wake = asyncio.Event()          # set() = "there may be new work, look now"
-        self._stopping = False
+        self.ollama = ollama
+        self._wake = asyncio.Event()      # set() = "there may be new work, look now"
+        self._stop = asyncio.Event()      # set() = "shut down"
         self._task: asyncio.Task | None = None
 
     # ------------------------------------------------------------------ lifecycle
@@ -32,107 +66,136 @@ class IngestionWorker:
         self._task = asyncio.create_task(self._run(), name="ingestion-worker")
 
     async def stop(self) -> None:
-        self._stopping = True
+        self._stop.set()
         self._wake.set()
         if self._task:
             try:
-                # Let the current resume finish (up to 30 s), then give up waiting.
                 await asyncio.wait_for(self._task, timeout=30)
             except TimeoutError:
+                # An LLM call can take minutes: cancel it. The resume stays in a "working" status
+                # and is put back in the queue by _recover_interrupted() on the next start.
                 self._task.cancel()
 
     def notify(self) -> None:
-        """Called by the upload endpoints so new files are processed immediately, not after the poll delay."""
         self._wake.set()
 
     @property
     def running(self) -> bool:
         return self._task is not None and not self._task.done()
 
+    async def _sleep(self, seconds: float) -> None:
+        """Sleep, but wake up immediately if the server is shutting down."""
+        try:
+            await asyncio.wait_for(self._stop.wait(), timeout=seconds)
+        except TimeoutError:
+            pass
+
     # ------------------------------------------------------------------ main loop
     async def _run(self) -> None:
-        logger.info("Ingestion worker started")
+        logger.info("Ingestion worker started (extraction model: %s)", self.settings.extraction_model)
         await self._recover_interrupted()
-        while not self._stopping:
+        while not self._stop.is_set():
             try:
                 did_work = await self._process_next()
             except Exception:
-                # A bug must not kill the worker forever: log it, pause, keep going.
                 logger.exception("Unexpected error in ingestion worker")
                 did_work = False
             if did_work:
-                continue                        # more may be waiting: go again straight away
+                continue
             self._wake.clear()
             try:
                 await asyncio.wait_for(self._wake.wait(), timeout=self.settings.worker_poll_seconds)
             except TimeoutError:
-                pass                            # nothing woke us: just poll again
+                pass
         logger.info("Ingestion worker stopped")
 
     async def _recover_interrupted(self) -> None:
-        """A resume left in PARSING means the server stopped mid-way. Put it back in the queue."""
+        """Anything left in a 'working' status was interrupted: put it back where it was waiting."""
         async with SessionLocal() as session:
-            result = await session.execute(
-                update(Resume).where(Resume.status == ResumeStatus.PARSING).values(status=ResumeStatus.QUEUED)
-            )
+            for stage in STAGES:
+                result = await session.execute(
+                    update(Resume).where(Resume.status == stage.working).values(status=stage.waiting)
+                )
+                if result.rowcount:
+                    logger.warning("Re-queued %d resume(s) interrupted during '%s'", result.rowcount, stage.name)
             await session.commit()
-            if result.rowcount:
-                logger.warning("Re-queued %d resume(s) interrupted by a restart", result.rowcount)
 
-    # ------------------------------------------------------------------ one resume
+    # ------------------------------------------------------------------ one unit of work
+    async def _claim(self) -> Claimed | None:
+        """Find the next resume for the earliest stage that has work, and mark it as being worked on."""
+        async with SessionLocal() as session:
+            for stage in STAGES:
+                resume = await session.scalar(
+                    select(Resume)
+                    .where(Resume.status == stage.waiting, Resume.is_current.is_(True))
+                    .order_by(Resume.created_at, Resume.id)
+                    .limit(1)
+                )
+                if resume is None:
+                    continue
+                resume.status = stage.working
+                resume.attempts += 1
+                resume.error_message = None
+                await session.commit()
+                return Claimed(resume.id, stage, resume.attempts, resume.stored_path,
+                               resume.mime_type, resume.raw_text)
+        return None
+
     async def _process_next(self) -> bool:
-        """Process the oldest queued resume. Returns False when the queue is empty."""
-        # 1. Claim it: mark PARSING in its own short transaction, so the admin page shows progress.
-        async with SessionLocal() as session:
-            resume = await session.scalar(
-                select(Resume)
-                .where(Resume.status == ResumeStatus.QUEUED)
-                .order_by(Resume.created_at, Resume.id)
-                .limit(1)
-            )
-            if resume is None:
-                return False
-            resume.status = ResumeStatus.PARSING
-            resume.attempts += 1
-            resume.error_message = None
-            await session.commit()
-            resume_id, path, mime_type, attempt = resume.id, resume.stored_path, resume.mime_type, resume.attempts
-
-        logger.info("Parsing resume %s (attempt %d): %s", resume_id, attempt, path)
-
-        # 2. Do the slow work OUTSIDE any database transaction, in a thread.
+        job = await self._claim()
+        if job is None:
+            return False
+        logger.info("Resume %s: %s (attempt %d)", job.id, job.stage.name, job.attempt)
         try:
-            result = await asyncio.to_thread(
-                extract_text, Path(path), mime_type, self.settings.min_chars_per_page
-            )
+            if job.stage.name == "parse":
+                await self._parse(job)
+            elif job.stage.name == "extract":
+                await self._extract(job)
         except ExtractionError as exc:
-            # The file itself is the problem (scanned, corrupt, empty): retrying is pointless.
-            logger.warning("Resume %s failed permanently: %s", resume_id, exc)
-            await self._save(resume_id, status=ResumeStatus.FAILED, error_message=str(exc))
-            return True
+            # The file itself is the problem (scanned, corrupt...): retrying won't help.
+            logger.warning("Resume %s failed permanently: %s", job.id, exc)
+            await self._update(job.id, status=ResumeStatus.FAILED, error_message=str(exc))
+        except OllamaError as exc:
+            # Ollama is down or busy: not the resume's fault. Undo the attempt and pause.
+            logger.warning("Ollama unavailable (%s). Pausing %.0fs.", exc, self.settings.ollama_retry_seconds)
+            await self._update(job.id, status=job.stage.waiting, attempts=job.attempt - 1,
+                               error_message=f"Waiting for Ollama: {exc}")
+            await self._sleep(self.settings.ollama_retry_seconds)
         except Exception as exc:
-            # Unexpected (a bug, disk hiccup...): retry a few times before giving up.
-            logger.exception("Resume %s: unexpected error", resume_id)
-            give_up = attempt >= self.settings.worker_max_attempts
-            note = f"gave up after {attempt} attempts" if give_up else "will retry"
-            await self._save(
-                resume_id,
-                status=ResumeStatus.FAILED if give_up else ResumeStatus.QUEUED,
-                error_message=f"{type(exc).__name__}: {exc} ({note})",
+            logger.exception("Resume %s: unexpected error during %s", job.id, job.stage.name)
+            give_up = job.attempt >= self.settings.worker_max_attempts
+            note = f"gave up after {job.attempt} attempts" if give_up else "will retry"
+            await self._update(
+                job.id,
+                status=ResumeStatus.FAILED if give_up else job.stage.waiting,
+                error_message=f"{job.stage.name}: {type(exc).__name__}: {exc} ({note})",
             )
-            return True
-
-        # 3. Save the result.
-        await self._save(
-            resume_id,
-            status=ResumeStatus.PARSED,
-            raw_text=result.text,
-            page_count=result.page_count,
-        )
-        logger.info("Resume %s parsed: %d characters via %s", resume_id, len(result.text), result.method)
         return True
 
-    async def _save(self, resume_id: int, **values) -> None:
+    # ------------------------------------------------------------------ stages
+    async def _parse(self, job: Claimed) -> None:
+        result = await asyncio.to_thread(
+            extract_text, Path(job.path), job.mime_type, self.settings.min_chars_per_page
+        )
+        await self._update(job.id, status=ResumeStatus.PARSED, attempts=0,
+                           raw_text=result.text, page_count=result.page_count)
+        logger.info("Resume %s parsed: %d characters via %s", job.id, len(result.text), result.method)
+
+    async def _extract(self, job: Claimed) -> None:
+        if not job.raw_text:
+            raise ExtractionError("No text to extract from (the parse stage produced nothing).")
+        outcome = await extract_profile(
+            self.ollama, job.raw_text,
+            model=self.settings.extraction_model,
+            num_ctx=self.settings.llm_num_ctx,
+            max_output_tokens=self.settings.extraction_max_output_tokens,
+            max_input_chars=self.settings.extraction_max_input_chars,
+        )
+        async with SessionLocal() as session:
+            if not await save_profile(session, job.id, outcome):
+                logger.info("Resume %s was deleted during extraction; result discarded", job.id)
+
+    async def _update(self, resume_id: int, **values) -> None:
         async with SessionLocal() as session:
             resume = await session.get(Resume, resume_id)
             if resume is None:

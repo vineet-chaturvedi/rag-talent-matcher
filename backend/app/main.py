@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
 
     app.state.worker = None
     if settings.worker_enabled:
-        app.state.worker = IngestionWorker(settings)
+        app.state.worker = IngestionWorker(settings, app.state.ollama)
         app.state.worker.start()
 
     logger.info("Started %s (%s) | Ollama at %s", settings.app_name, settings.environment, settings.ollama_base_url)
@@ -46,7 +46,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.3.0",
+    version="0.4.0",
     description="RAG system that matches employees to internal project roles using local LLMs (Ollama).",
     lifespan=lifespan,
 )

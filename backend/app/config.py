@@ -6,6 +6,7 @@ variable or a line in backend/.env (names are case-insensitive:
 EMBED_MODEL in .env -> settings.embed_model in Python).
 """
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -38,6 +39,12 @@ class Settings(BaseSettings):
     worker_poll_seconds: float = 5.0     # how often an idle worker re-checks the queue
     worker_max_attempts: int = 3         # retries for unexpected errors
     min_chars_per_page: int = 100        # less text than this per PDF page = probably a scanned image
+    ollama_retry_seconds: float = 30.0   # if Ollama is down, the worker waits this long before trying again
+
+    # ---- Structured extraction (Step 5) ----
+    extraction_model_role: Literal["fast", "quality"] = "quality"  # which of the two LLMs reads resumes
+    extraction_max_output_tokens: int = 2048   # hard cap on the JSON answer length
+    extraction_max_input_chars: int = 16000    # ~4,000 tokens; longer resumes are truncated (with a warning)
 
     # ---- Frontend ----
     cors_origins: list[str] = ["http://localhost:3000"]
@@ -49,6 +56,10 @@ class Settings(BaseSettings):
     @property
     def max_upload_bytes(self) -> int:
         return self.max_upload_mb * 1024 * 1024
+
+    @property
+    def extraction_model(self) -> str:
+        return self.fast_llm_model if self.extraction_model_role == "fast" else self.quality_llm_model
 
 
 @lru_cache

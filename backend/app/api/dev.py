@@ -1,17 +1,21 @@
 """
 Learning-only endpoints (disabled when ENVIRONMENT=production).
 
-POST /api/dev/chat        -> talk to the fast or quality model, see real speed stats
-POST /api/dev/similarity  -> compare two texts by embedding similarity
+POST /api/dev/chat                 -> talk to the fast or quality model, see real speed stats
+POST /api/dev/similarity           -> compare two texts by embedding similarity
+POST /api/dev/extract/{resume_id}  -> run LLM extraction on one resume WITHOUT saving (Step 5)
 """
 import math
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_ollama
+from app.api.deps import get_db, get_ollama
 from app.config import Settings, get_settings
+from app.db.models import Resume
+from app.extraction.extractor import ExtractionOutputError, extract_profile
 from app.llm.ollama_client import OllamaClient, OllamaError
 
 router = APIRouter(prefix="/api/dev", tags=["dev (learning only)"])
@@ -99,14 +103,46 @@ async def dev_similarity(
     # text_a plays the "job/query" role, text_b the "resume/document" role.
     a = f"search_query: {req.text_a}" if req.use_prefixes else req.text_a
     b = f"search_document: {req.text_b}" if req.use_prefixes else req.text_b
-
     try:
-        vec_a, vec_b = await ollama.embed([a, b], model=settings.embed_model)  # one batched call
+        vec_a, vec_b = await ollama.embed([a, b], model=settings.embed_model)
     except OllamaError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
-
     return {
         "cosine_similarity": round(cosine_similarity(vec_a, vec_b), 4),
         "dimensions": len(vec_a),
         "used_prefixes": req.use_prefixes,
+    }
+
+
+# ---------------------------------------------------------------- extraction (Step 5)
+@router.post("/extract/{resume_id}")
+async def dev_extract(
+    resume_id: int,
+    model: Literal["fast", "quality"] = "quality",
+    db: AsyncSession = Depends(get_db),
+    ollama: OllamaClient = Depends(get_ollama),
+    settings: Settings = Depends(get_settings),
+):
+    """Run LLM extraction on one resume and show everything - WITHOUT saving it. For experimenting."""
+    resume = await db.get(Resume, resume_id)
+    if resume is None:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    if not resume.raw_text:
+        raise HTTPException(status_code=409, detail=f"Resume has no text yet (status '{resume.status}').")
+    model_name = settings.fast_llm_model if model == "fast" else settings.quality_llm_model
+    try:
+        outcome = await extract_profile(
+            ollama, resume.raw_text, model=model_name, num_ctx=settings.llm_num_ctx,
+            max_output_tokens=settings.extraction_max_output_tokens,
+            max_input_chars=settings.extraction_max_input_chars,
+        )
+    except OllamaError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except ExtractionOutputError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    return {
+        "model": outcome.model,
+        "stats": outcome.stats,
+        "profile": outcome.profile.to_dict(),         # after verification + normalisation + date maths
+        "llm_output": outcome.llm_output.model_dump(),  # exactly what the model returned
     }
