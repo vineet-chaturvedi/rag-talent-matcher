@@ -12,6 +12,7 @@ from app.config import Settings
 from app.db.enums import ResumeStatus
 from app.db.models import Employee, Resume
 from app.ingestion.storage import build_storage_path, delete_file, save_file, validate_resume_file
+from app.rag.keyword_index import delete_resume_rows
 from app.rag.vector_store import get_vector_store
 
 
@@ -66,9 +67,12 @@ async def add_resume(
         raise
     await session.refresh(resume)  # load the values the database filled in (created_at, ...)
 
-    # The old version is no longer current: remove its vectors so search never finds outdated text.
+    # The old version is no longer current: remove it from both search indexes.
     for old_id in previous_ids:
         await asyncio.to_thread(get_vector_store().delete_resume, old_id)
+        await delete_resume_rows(session, old_id)
+    if previous_ids:
+        await session.commit()
     return resume
 
 
@@ -84,6 +88,7 @@ def employee_code_from_filename(filename: str) -> str | None:
 async def delete_resume(session: AsyncSession, resume: Resume) -> None:
     """Delete one resume version: database rows (cascade) + the file. Promote the newest remaining version."""
     resume_id, employee_id, was_current, path = resume.id, resume.employee_id, resume.is_current, resume.stored_path
+    await delete_resume_rows(session, resume_id)   # keyword index (not covered by CASCADE)
     await session.delete(resume)   # cascades to profile, skills, chunks... (Steps 5-6)
     await session.flush()
     if was_current:

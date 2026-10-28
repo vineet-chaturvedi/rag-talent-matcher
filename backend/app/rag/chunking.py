@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from datetime import date
 
 from app.db.enums import ChunkSection
+from app.extraction.postprocess import ground_job_skills, normalize_for_match
 
 _HEADING = re.compile(
     r"^(education|certifications?|skills|technical skills|key skills|projects|summary|profile|"
@@ -29,6 +30,10 @@ _HEADING = re.compile(
 )
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 _PHONE = re.compile(r"\+?\d[\d\s()-]{8,}\d")
+# Gendered words -> neutral ones. Matching must not see (or be influenced by) gender.
+_PRONOUNS = {"she": "they", "he": "they", "her": "their", "his": "their", "him": "them",
+             "hers": "theirs", "herself": "themselves", "himself": "themselves"}
+_PRONOUN_RE = re.compile(r"\b(" + "|".join(_PRONOUNS) + r")\b", re.IGNORECASE)
 
 
 @dataclass
@@ -56,13 +61,21 @@ def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9+#.]+", " ", (text or "").lower())).strip()
 
 
+def _neutral_pronoun(match: re.Match) -> str:
+    word = match.group(0)
+    neutral = _PRONOUNS[word.lower()]
+    return neutral.capitalize() if word[0].isupper() else neutral
+
+
 def anonymize(text: str, full_name: str | None) -> str:
     """
-    Remove what identifies the person but says nothing about their skills.
-    Matching (and the LLM judge in Step 8) should look at experience, never at names or contact details.
+    Remove what identifies the person but says nothing about their skills: name, email, phone,
+    and gendered pronouns ("She specialises" -> "They specialises": slightly odd grammar, but neutral).
+    Matching (and the LLM judge in Step 8) should look at experience, never at identity.
     """
     text = _EMAIL.sub("[email]", text)
     text = _PHONE.sub("[phone]", text)
+    text = _PRONOUN_RE.sub(_neutral_pronoun, text)
     if full_name:
         parts = [full_name] + [p for p in full_name.split() if len(p) >= 3]
         for part in parts:
@@ -152,6 +165,7 @@ def build_chunks(
 ) -> list[ChunkDraft]:
     clean = (lambda t: anonymize(t, full_name)) if anonymize_text else (lambda t: t)
     chunks: list[ChunkDraft] = []
+    skill_names = [name for name, _years in skills]
 
     # ---- 1. Profile card (from the Step 5 structured data)
     card = [f"Employee {employee_code} | Profile"]
@@ -183,6 +197,12 @@ def build_chunks(
                     break
             used.update(range(start, end))
             body = "\n".join(lines[start:end])
+        # Enrichment (Step 7): list the skills written in this job's text, by their CANONICAL names.
+        # The resume may say "k8s"; the chunk now also says "Kubernetes", which the embedding
+        # model and keyword search both understand. Short job chunks gain real content too.
+        job_skills, _ = ground_job_skills(skill_names, normalize_for_match(body))
+        if job_skills:
+            header = f"{header}\nSkills used: {', '.join(job_skills)}"
         for piece in split_text(clean(body), max_chars - len(header) - 1, overlap) or [""]:
             if piece.strip():
                 chunks.append(ChunkDraft(ChunkSection.EXPERIENCE, f"{header}\n{piece}"))

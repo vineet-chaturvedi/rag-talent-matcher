@@ -22,6 +22,8 @@ Rules:
 5. "education": degree, institution and year as written. "certifications": names as written.
 6. "headline": the person's current professional title.
    "summary": two sentences describing the person's experience, based only on the resume.
+   Write the summary WITHOUT the person's name and WITHOUT gendered words (he, she, his, her, him);
+   start with the professional title, e.g. "Senior DevOps Engineer with 6 years of ...".
 7. If information is missing, use null or an empty list. Do not invent it."""
 
 

@@ -54,6 +54,16 @@ class Settings(BaseSettings):
     embed_batch_size: int = 16                      # chunks sent to Ollama per /api/embed call
     anonymize_chunks: bool = True                   # remove name, email, phone from indexed text
 
+    # ---- Matching: role parsing & hybrid retrieval (Step 7) ----
+    role_parse_model_role: Literal["fast", "quality"] = "quality"  # which LLM reads role descriptions
+    retrieval_vector_pool: int = 80          # nearest chunks fetched from ChromaDB
+    retrieval_keyword_pool: int = 200        # best BM25 chunks fetched from the keyword index
+    rrf_k: int = 60                          # Reciprocal Rank Fusion constant (60 is the standard value)
+    rrf_weight_skills: float = 1.0           # how much each signal counts in the fusion
+    rrf_weight_keyword: float = 1.0
+    rrf_weight_vector: float = 1.0
+    default_skill_min_years: float = 2.0     # years assumed "enough" when a role doesn't say
+
     # ---- Frontend ----
     cors_origins: list[str] = ["http://localhost:3000"]
 
@@ -64,6 +74,10 @@ class Settings(BaseSettings):
     @property
     def max_upload_bytes(self) -> int:
         return self.max_upload_mb * 1024 * 1024
+
+    @property
+    def role_parse_model(self) -> str:
+        return self.fast_llm_model if self.role_parse_model_role == "fast" else self.quality_llm_model
 
     @property
     def extraction_model(self) -> str:

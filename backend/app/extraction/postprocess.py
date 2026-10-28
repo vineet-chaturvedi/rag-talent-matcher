@@ -59,6 +59,9 @@ def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9+#.]+", " ", text.lower())).strip()
 
 
+normalize_for_match = _norm   # public name, used by chunking (Step 7)
+
+
 def appears_in(snippet: str | None, text_norm: str, min_ratio: float = 0.8) -> bool:
     """Does the snippet really occur in the resume? Exact match, or a near-exact one (small LLM copy slips)."""
     if not snippet:

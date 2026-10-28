@@ -7,11 +7,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import dev, employees, health, resumes, search
+from app.api import dev, employees, health, projects, resumes, search
 from app.config import get_settings
 from app.db.session import engine, init_db
 from app.ingestion.worker import IngestionWorker
 from app.llm.ollama_client import OllamaClient
+from app.rag.keyword_index import ensure_keyword_index
 from app.rag.vector_store import get_vector_store
 
 settings = get_settings()
@@ -31,6 +32,7 @@ async def lifespan(app: FastAPI):
     app.state.ollama = OllamaClient(settings.ollama_base_url, settings.ollama_timeout_seconds)
     store = get_vector_store()   # opens (or creates) data/chroma
     logger.info("Vector store ready (%s): %d chunks", settings.chroma_dir, store.count())
+    await ensure_keyword_index()  # SQLite FTS5 table for keyword (BM25) search, rebuilt if out of sync
 
     app.state.worker = None
     if settings.worker_enabled:
@@ -49,7 +51,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.5.0",
+    version="0.6.0",
     description="RAG system that matches employees to internal project roles using local LLMs (Ollama).",
     lifespan=lifespan,
 )
@@ -66,6 +68,7 @@ app.include_router(health.router)
 app.include_router(employees.router)
 app.include_router(resumes.router)
 app.include_router(search.router)
+app.include_router(projects.router)
 if settings.is_development:
     app.include_router(dev.router)
 

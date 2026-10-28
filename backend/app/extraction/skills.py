@@ -61,6 +61,7 @@ CATALOG: dict[str, tuple[str, list[str]]] = {
     "Jenkins": ("devops", []),
     "GitHub Actions": ("devops", []),
     "Azure DevOps": ("devops", []),
+    "CI/CD": ("devops", ["ci cd", "ci/cd pipelines", "continuous integration", "continuous delivery", "continuous deployment"]),
     "Prometheus": ("devops", []),
     "Grafana": ("devops", []),
     "AWS": ("cloud", ["amazon web services"]),
@@ -89,6 +90,7 @@ CATALOG: dict[str, tuple[str, list[str]]] = {
     "vLLM": ("ml", []),
     "NLP": ("ml", ["natural language processing"]),
     "LLMs": ("ml", ["llm", "large language models", "large language model"]),
+    "LLM evaluation": ("ml", ["llm evaluation", "llm evals", "rag evaluation", "evaluation of llms"]),
     # ---- testing ----
     "pytest": ("testing", []),
     "Selenium": ("testing", ["selenium webdriver"]),
@@ -175,3 +177,72 @@ def spellings(name: str) -> list[str]:
     """Every known way of writing a canonical skill: 'Kubernetes' -> ['Kubernetes', 'k8s', 'kube']."""
     entry = CATALOG.get(name)
     return [name, *entry[1]] if entry else [name]
+
+
+# Having the key skill implies (part of) another one. Used by matching (Step 7):
+# a role needing "Kubernetes" gives partial credit to someone with "Amazon EKS" or "AKS".
+SKILL_IMPLIES: dict[str, list[str]] = {
+    "Amazon EKS": ["Kubernetes", "AWS"],
+    "AKS": ["Kubernetes", "Azure"],
+    "Helm": ["Kubernetes"],
+    "ArgoCD": ["Kubernetes", "CI/CD"],
+    "Kubeflow": ["Kubernetes"],
+    "Django REST Framework": ["Django", "REST APIs", "Python"],
+    "Django": ["Python"],
+    "FastAPI": ["REST APIs", "Python"],
+    "Flask": ["REST APIs", "Python"],
+    "Spring Boot": ["Java", "Microservices"],
+    "Spring MVC": ["Java"],
+    "Next.js": ["React"],
+    "Node.js": ["JavaScript"],
+    "PySpark": ["Python"],
+    "AWS SageMaker": ["AWS"],
+    "RAG": ["LLMs", "Vector Databases"],
+    "LangChain": ["LLMs"],
+    "vLLM": ["LLMs"],
+    "LLM serving": ["LLMs"],
+    "Prompt engineering": ["LLMs"],
+    "LLM evaluation": ["LLMs"],
+    "ChromaDB": ["Vector Databases"],
+    "FAISS": ["Vector Databases"],
+    "Hugging Face Transformers": ["NLP"],
+    "GitHub Actions": ["CI/CD"],
+    "Jenkins": ["CI/CD"],
+    "Azure DevOps": ["CI/CD"],
+}
+
+
+_IMPLIES_LOWER = {k.lower(): v for k, v in SKILL_IMPLIES.items()}
+
+
+def implied_by(name: str) -> list[str]:
+    """Skills that having `name` implies (case-insensitive): implied_by("Amazon EKS") -> ["Kubernetes", "AWS"]."""
+    return _IMPLIES_LOWER.get((name or "").lower(), [])
+
+
+def _phrase_norm(text: str) -> str:
+    # lowercase, punctuation -> space, "/" kept as its own word ("ci/cd" -> "ci / cd", "a/b" -> "a / b")
+    text = re.sub(r"[^a-z0-9+#./]+", " ", (text or "").lower()).replace("/", " / ")
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def skills_in_phrase(phrase: str) -> list[str]:
+    """
+    Known skills mentioned INSIDE a longer phrase (used for role requirements, Step 7):
+      "retrieval-augmented generation using vector databases" -> ["RAG", "Vector Databases"]
+      "nlp fundamentals"                                      -> ["NLP"]
+      "strong communication"                                  -> []
+    Longest spellings are matched first, and matched words are blanked out,
+    so "llm evaluation" gives "LLM evaluation", not also "LLMs".
+    """
+    text = f" {_phrase_norm(phrase)} "
+    found: list[str] = []
+    for spelling in sorted(_LOOKUP, key=len, reverse=True):
+        key = f" {_phrase_norm(spelling)} "
+        if len(key.strip()) < 2 or key not in text:
+            continue
+        text = text.replace(key, " | ")
+        canonical = _LOOKUP[spelling]
+        if canonical not in found:
+            found.append(canonical)
+    return found

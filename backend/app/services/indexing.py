@@ -17,6 +17,7 @@ from app.db.session import SessionLocal
 from app.llm.ollama_client import OllamaClient
 from app.rag.chunking import JobInfo, build_chunks
 from app.rag.embeddings import embed_documents
+from app.rag.keyword_index import replace_resume_rows
 from app.rag.vector_store import get_vector_store
 
 logger = logging.getLogger(__name__)
@@ -71,7 +72,7 @@ async def index_resume(resume_id: int, ollama: OllamaClient, settings: Settings)
         get_vector_store().replace_resume, resume_id, ids, vectors, [d.text for d in drafts], metadatas
     )
 
-    # 5. Chunk rows -> SQLite (the source of truth) and mark the resume READY, in one transaction.
+    # 5. Chunk rows + keyword index -> SQLite, and mark the resume READY, in one transaction.
     async with SessionLocal() as session:
         resume = await session.get(Resume, resume_id)
         if resume is None:                                   # deleted meanwhile: undo the vectors
@@ -83,6 +84,7 @@ async def index_resume(resume_id: int, ollama: OllamaClient, settings: Settings)
                         token_count=d.token_estimate, embedding_model=settings.embed_model)
             for i, (cid, d) in enumerate(zip(ids, drafts))
         )
+        await replace_resume_rows(session, resume_id, employee_id, [(cid, d.text) for cid, d in zip(ids, drafts)])
         resume.status = ResumeStatus.READY
         resume.attempts = 0
         resume.error_message = None
