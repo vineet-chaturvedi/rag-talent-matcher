@@ -16,12 +16,15 @@ from pathlib import Path
 
 import httpx
 
+from scripts.api_login import login
+
 ROLE_FIELDS = ("title", "description", "location", "allocation_percent", "start_date", "headcount")
 
 
 def main(base_url: str, roles_file: Path, reparse: bool) -> None:
     roles = json.loads(roles_file.read_text(encoding="utf-8"))
     with httpx.Client(base_url=base_url, timeout=600) as client:   # parsing can take a minute on a CPU
+        login(client)
         projects = {p["name"]: p for p in client.get("/api/projects").raise_for_status().json()}
 
         for spec in roles:

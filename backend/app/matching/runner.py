@@ -51,7 +51,8 @@ def _facts(cand) -> dict:
 
 # --------------------------------------------------------------------------- part 1: synchronous
 async def create_match_run(session: AsyncSession, ollama: OllamaClient, settings: Settings, role: ProjectRole,
-                           top_k: int, judge_top_n: int, only_available: bool) -> MatchRun:
+                           top_k: int, judge_top_n: int, only_available: bool,
+                           created_by_id: int | None = None) -> MatchRun:
     requirements = effective_requirements(role)
     weights = settings.score_weights
     candidates, timings = await retrieve_candidates(session, ollama, settings, role, top_k=top_k,
@@ -64,7 +65,7 @@ async def create_match_run(session: AsyncSession, ollama: OllamaClient, settings
     scored = score_candidates(candidates, role, requirements, years, weights)
 
     run = MatchRun(
-        role_id=role.id, status=MatchRunStatus.RUNNING,
+        role_id=role.id, status=MatchRunStatus.RUNNING, created_by_id=created_by_id,
         settings={
             "top_k": top_k, "judge_top_n": judge_top_n, "only_available": only_available,
             "weights": weights.as_dict(), "judge_weight": settings.judge_weight,

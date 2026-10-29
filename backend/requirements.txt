@@ -19,3 +19,7 @@ python-docx>=1.1             # Word .docx text, including tables
 
 # Vector database (Step 6)
 chromadb>=1.0                # embedded vector store, saved to data/chroma
+
+# Authentication (Step 9)
+pwdlib[argon2]>=0.2          # password hashing with Argon2id (FastAPI's recommended library)
+PyJWT>=2.9                   # signed login tokens (JSON Web Tokens)

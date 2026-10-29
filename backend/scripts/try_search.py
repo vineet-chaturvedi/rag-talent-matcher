@@ -10,6 +10,8 @@ import sys
 
 import httpx
 
+from scripts.api_login import login
+
 DEMO_QUERIES = [
     ("container orchestration and infrastructure as code", "EMP-1003 (says 'k8s', 'Terraform modules')"),
     ("high-traffic backend APIs and database performance tuning", "EMP-1001 ('2M requests/day', 'p95 latency')"),
@@ -38,6 +40,7 @@ def show(client: httpx.Client, query: str, expected: str | None) -> None:
 
 def main() -> None:
     with httpx.Client(base_url="http://127.0.0.1:8010", timeout=60) as client:
+        login(client)
         if len(sys.argv) > 1:
             show(client, " ".join(sys.argv[1:]), None)
         else:

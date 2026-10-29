@@ -20,9 +20,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db, get_worker
+from app.auth.dependencies import require_admin
 from app.config import Settings, get_settings
 from app.db.enums import ResumeStatus
-from app.db.models import Employee, Resume, ResumeSkill
+from app.db.models import Employee, Resume, ResumeSkill, User
 from app.ingestion.storage import InvalidFileError
 from app.ingestion.worker import IngestionWorker
 from app.rag.vector_store import get_vector_store
@@ -50,6 +51,7 @@ async def upload_resume(
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
     worker: IngestionWorker | None = Depends(get_worker),
+    user: User = Depends(require_admin),
 ):
     employee = await db.get(Employee, employee_id)
     if employee is None:
@@ -57,7 +59,7 @@ async def upload_resume(
 
     data = await file.read(settings.max_upload_bytes + 1)  # never read more than limit + 1 byte
     try:
-        resume = await add_resume(db, settings, employee, file.filename or "", data)
+        resume = await add_resume(db, settings, employee, file.filename or "", data, uploaded_by_id=user.id)
     except InvalidFileError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except DuplicateResumeError as exc:
@@ -73,6 +75,7 @@ async def bulk_upload(
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
     worker: IngestionWorker | None = Depends(get_worker),
+    user: User = Depends(require_admin),
 ):
     if len(files) > settings.max_files_per_batch:
         raise HTTPException(status_code=400, detail=f"At most {settings.max_files_per_batch} files per upload.")
@@ -91,7 +94,7 @@ async def bulk_upload(
             continue
         data = await upload.read(settings.max_upload_bytes + 1)
         try:
-            resume = await add_resume(db, settings, employee, name, data)
+            resume = await add_resume(db, settings, employee, name, data, uploaded_by_id=user.id)
         except (InvalidFileError, DuplicateResumeError) as exc:
             items.append(UploadItemResult(filename=name, ok=False, employee_code=code, error=str(exc)))
             continue
@@ -132,7 +135,7 @@ async def queue_stats(
                       vector_count=await asyncio.to_thread(get_vector_store().count))
 
 
-@router.post("/api/resumes/reextract")
+@router.post("/api/resumes/reextract", dependencies=[Depends(require_admin)])
 async def reextract_all(
     db: AsyncSession = Depends(get_db),
     worker: IngestionWorker | None = Depends(get_worker),
@@ -142,7 +145,7 @@ async def reextract_all(
     return {"requeued": count}
 
 
-@router.post("/api/resumes/reembed")
+@router.post("/api/resumes/reembed", dependencies=[Depends(require_admin)])
 async def reembed_all(worker: IngestionWorker | None = Depends(get_worker)):
     count = await requeue_for_embedding()
     _wake(worker)
@@ -209,7 +212,7 @@ async def get_profile(resume_id: int, db: AsyncSession = Depends(get_db)):
     )
 
 
-@router.post("/api/resumes/{resume_id}/retry", response_model=ResumeOut)
+@router.post("/api/resumes/{resume_id}/retry", response_model=ResumeOut, dependencies=[Depends(require_admin)])
 async def retry(
     resume_id: int,
     db: AsyncSession = Depends(get_db),
@@ -225,7 +228,8 @@ async def retry(
     return resume
 
 
-@router.delete("/api/resumes/{resume_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/api/resumes/{resume_id}", status_code=status.HTTP_204_NO_CONTENT,
+               dependencies=[Depends(require_admin)])
 async def remove(resume_id: int, db: AsyncSession = Depends(get_db)):
     resume = await db.get(Resume, resume_id)
     if resume is None:

@@ -19,6 +19,8 @@ from pathlib import Path
 
 import httpx
 
+from scripts.api_login import login
+
 
 def ndcg_at(found: list[str], expected: list[str], k: int) -> float:
     """Graded relevance: the 1st expected person is worth most, the last expected person least."""
@@ -52,6 +54,7 @@ def main(base_url: str, roles_file: Path, judge_top_n: int, top_k: int) -> None:
     specs = {s["title"]: s for s in json.loads(roles_file.read_text(encoding="utf-8"))}
     totals = {"ndcg@5": 0.0, "mrr": 0.0, "pairs": 0.0}
     with httpx.Client(base_url=base_url, timeout=120) as client:
+        login(client)
         roles = [r for p in client.get("/api/projects").raise_for_status().json() for r in p["roles"]
                  if r["title"] in specs]
         if not roles:

@@ -75,12 +75,30 @@ class Settings(BaseSettings):
     judge_max_output_tokens: int = 1024      # cap on the judge's JSON answer
     judge_max_dossier_chars: int = 6000      # ~1,500 tokens of resume evidence per candidate
 
+    # ---- Authentication (Step 9) ----
+    jwt_secret: str | None = None            # signs login tokens; REQUIRED in production (see .env.example)
+    access_token_minutes: int = 480          # how long a login lasts (480 = one working day)
+    auth_cookie_name: str = "rtm_access"     # HttpOnly cookie used by the browser frontend
+
     # ---- Frontend ----
     cors_origins: list[str] = ["http://localhost:3000"]
 
     @property
     def is_development(self) -> bool:
         return self.environment.lower() == "development"
+
+    @property
+    def jwt_secret_value(self) -> str:
+        """The signing secret. In development a random one is made if .env has none (logins end on restart)."""
+        if self.jwt_secret:
+            return self.jwt_secret
+        if not self.is_development:
+            raise RuntimeError("JWT_SECRET must be set in production (see .env.example).")
+        global _DEV_SECRET
+        if _DEV_SECRET is None:
+            import secrets
+            _DEV_SECRET = secrets.token_urlsafe(48)
+        return _DEV_SECRET
 
     @property
     def max_upload_bytes(self) -> int:
@@ -103,6 +121,9 @@ class Settings(BaseSettings):
     @property
     def extraction_model(self) -> str:
         return self.fast_llm_model if self.extraction_model_role == "fast" else self.quality_llm_model
+
+
+_DEV_SECRET: str | None = None   # random development secret, created once per server start
 
 
 @lru_cache

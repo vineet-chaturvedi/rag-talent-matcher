@@ -14,12 +14,15 @@ from pathlib import Path
 
 import httpx
 
+from scripts.api_login import login
+
 MIME = {".pdf": "application/pdf",
         ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
 
 
 def main(base_url: str, samples: Path) -> None:
     with httpx.Client(base_url=base_url, timeout=120) as client:
+        login(client)
         # 1. Employees
         csv_path = samples / "employees.csv"
         with csv_path.open("rb") as fh:

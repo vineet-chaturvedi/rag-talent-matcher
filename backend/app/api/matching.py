@@ -12,8 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db, get_ollama
+from app.auth.dependencies import get_current_user
 from app.config import Settings, get_settings
-from app.db.models import MatchResult, MatchRun, ProjectRole
+from app.db.models import MatchResult, MatchRun, ProjectRole, User
 from app.llm.ollama_client import OllamaClient, OllamaError
 from app.matching.runner import create_match_run, judge_run
 from app.schemas.matching import MatchRequest, MatchResultOut, MatchRunOut, MatchRunSummary
@@ -51,6 +52,7 @@ async def start_match(
     db: AsyncSession = Depends(get_db),
     ollama: OllamaClient = Depends(get_ollama),
     settings: Settings = Depends(get_settings),
+    user: User = Depends(get_current_user),
 ):
     role = await db.get(ProjectRole, role_id)
     if role is None:
@@ -59,7 +61,8 @@ async def start_match(
         raise HTTPException(status_code=409, detail="This role has no requirements yet: call /requirements/parse first.")
     try:
         run = await create_match_run(db, ollama, settings, role, body.top_k,
-                                     min(body.judge_top_n, body.top_k), body.only_available)
+                                     min(body.judge_top_n, body.top_k), body.only_available,
+                                     created_by_id=user.id)
     except OllamaError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
 

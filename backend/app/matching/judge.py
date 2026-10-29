@@ -60,8 +60,8 @@ Rules:
    exactly as listed, without the years.
    "met": "yes" = clearly shown in real work; "partly" = related or only listed; "no" = not shown.
    "quote": the exact words from <candidate> that prove it (at most 15 words), or null if "no".
-   Copy quotes from the resume's own sentences and bullet points, NOT from the "Skills used:",
-   "Total experience" or "Jobs" lines (those were written by software, not the person).
+   Copy quotes from the resume's own sentences and bullet points, NOT from the "Total experience"
+   or "Jobs" lines (those were written by software, not the person).
 3. "strengths": up to 3 things that make this person a good fit, each with an exact quote (at most 15 words).
 4. "gaps": up to 3 missing or weak points for THIS role (short phrases).
 5. "rating": strong / good / partial / weak, for the role as a whole.
@@ -91,6 +91,9 @@ def build_dossier(profile_lines: list[str], chunks: list[tuple[str, str]], max_c
             continue
         # Chunk headers say "Employee EMP-1003 | ..." - the judge must not see who it is.
         clean = re.sub(r"Employee [A-Z]+-\d+ \| ", "", chunk)
+        # Drop the "Skills used:" line our code adds for search (Step 7): in the second real run the judge
+        # kept quoting it ("Skills used: Python, FastAPI...") instead of the resume, so Kavya got 3/8 verified.
+        clean = "\n".join(l for l in clean.splitlines() if not l.startswith("Skills used:"))
         if len(dossier) + len(clean) + 2 > max_chars:
             break
         dossier += "\n\n" + clean

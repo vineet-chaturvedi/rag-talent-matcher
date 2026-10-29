@@ -23,7 +23,8 @@ class DuplicateResumeError(Exception):
 
 
 async def add_resume(
-    session: AsyncSession, settings: Settings, employee: Employee, filename: str, data: bytes
+    session: AsyncSession, settings: Settings, employee: Employee, filename: str, data: bytes,
+    uploaded_by_id: int | None = None,
 ) -> Resume:
     """
     Validate, store and queue one resume for an employee. It becomes the employee's current resume.
@@ -57,6 +58,7 @@ async def add_resume(
             file_size_bytes=file.size_bytes,
             is_current=True,
             status=ResumeStatus.QUEUED,
+            uploaded_by_id=uploaded_by_id,          # who uploaded it (Step 9 audit trail)
         )
         session.add(resume)
         await session.commit()

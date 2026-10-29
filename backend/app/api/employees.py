@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db
+from app.auth.dependencies import require_admin
 from app.db.models import Employee, Resume
 from app.schemas.employee import EmployeeDetail, EmployeeImportResult, EmployeeListItem
 from app.schemas.resume import ResumeOut
@@ -20,7 +21,7 @@ router = APIRouter(prefix="/api/employees", tags=["employees"])
 MAX_CSV_BYTES = 5 * 1024 * 1024  # 5 MB is roughly 50,000 employee rows
 
 
-@router.post("/import", response_model=EmployeeImportResult)
+@router.post("/import", response_model=EmployeeImportResult, dependencies=[Depends(require_admin)])
 async def import_employees(
     file: UploadFile = File(..., description="HR export as CSV (UTF-8). Required columns: employee_code, full_name"),
     db: AsyncSession = Depends(get_db),

@@ -14,8 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db, get_ollama
+from app.auth.dependencies import get_current_user
 from app.config import Settings, get_settings
-from app.db.models import Project, ProjectRole
+from app.db.models import Project, ProjectRole, User
 from app.llm.ollama_client import OllamaClient, OllamaError
 from app.matching.requirements import RoleParseError, ground_in_description, normalise_skill_sections, parse_role
 from app.matching.retrieval import retrieve_candidates
@@ -42,8 +43,9 @@ def _effective(role: ProjectRole) -> dict:
 
 # --------------------------------------------------------------------------- projects & roles
 @router.post("/api/projects", response_model=ProjectOut, status_code=201)
-async def create_project(body: ProjectCreate, db: AsyncSession = Depends(get_db)):
-    project = Project(**body.model_dump())
+async def create_project(body: ProjectCreate, db: AsyncSession = Depends(get_db),
+                         user: User = Depends(get_current_user)):
+    project = Project(**body.model_dump(), created_by_id=user.id)
     project.roles = []
     db.add(project)
     await db.commit()

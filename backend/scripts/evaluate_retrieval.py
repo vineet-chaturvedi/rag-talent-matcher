@@ -20,6 +20,8 @@ from pathlib import Path
 
 import httpx
 
+from scripts.api_login import login
+
 RUNS = {"hybrid": ["skills", "keyword", "vector"], "skills": ["skills"], "keyword": ["keyword"], "vector": ["vector"]}
 
 
@@ -35,6 +37,7 @@ def main(base_url: str, roles_file: Path) -> None:
     specs = {s["title"]: s for s in json.loads(roles_file.read_text(encoding="utf-8"))}
     totals = {run: [0.0, 0.0, 0.0] for run in RUNS}
     with httpx.Client(base_url=base_url, timeout=120) as client:
+        login(client)
         roles = [r for p in client.get("/api/projects").raise_for_status().json() for r in p["roles"]
                  if r["title"] in specs]
         if not roles:
