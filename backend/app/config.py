@@ -64,6 +64,17 @@ class Settings(BaseSettings):
     rrf_weight_vector: float = 1.0
     default_skill_min_years: float = 2.0     # years assumed "enough" when a role doesn't say
 
+    # ---- Scoring & LLM judge (Step 8) ----
+    score_skills_share: float = 0.85         # fit = 85% skill coverage + 15% retrieval relevance
+    score_experience_floor: float = 0.6      # factor for "not enough years" ranges from 0.6 to 1.0
+    score_availability_floor: float = 0.7    # factor for "not free in time" ranges from 0.7 to 1.0
+    score_location_floor: float = 0.9        # factor for "other city" ranges from 0.9 to 1.0
+    judge_model_role: Literal["fast", "quality"] = "quality"  # which LLM judges candidates
+    judge_top_n: int = 5                     # how many top candidates the judge reads per run (default)
+    judge_weight: float = 0.4                # final = (1 - w) × rule score + w × judge score
+    judge_max_output_tokens: int = 1024      # cap on the judge's JSON answer
+    judge_max_dossier_chars: int = 6000      # ~1,500 tokens of resume evidence per candidate
+
     # ---- Frontend ----
     cors_origins: list[str] = ["http://localhost:3000"]
 
@@ -74,6 +85,16 @@ class Settings(BaseSettings):
     @property
     def max_upload_bytes(self) -> int:
         return self.max_upload_mb * 1024 * 1024
+
+    @property
+    def judge_model(self) -> str:
+        return self.fast_llm_model if self.judge_model_role == "fast" else self.quality_llm_model
+
+    @property
+    def score_weights(self):
+        from app.matching.scoring import ScoreWeights   # imported here to avoid a circular import
+        return ScoreWeights(self.score_skills_share, self.score_experience_floor,
+                            self.score_availability_floor, self.score_location_floor)
 
     @property
     def role_parse_model(self) -> str:

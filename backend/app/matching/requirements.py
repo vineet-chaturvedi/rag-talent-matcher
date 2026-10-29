@@ -117,6 +117,11 @@ def normalise_skill_sections(requirements: dict) -> dict:
     return {**requirements, "must_have": must, "nice_to_have": nice}
 
 
+_SENIORITY_WORDS = {
+    "junior": ["junior", "jr", "entry level", "graduate"],
+    "mid": ["mid level", "intermediate"],              # not plain "mid": it matches "start mid-November"
+    "senior": ["senior", "sr"], "lead": ["lead", "tech lead", "team lead"], "principal": ["principal", "staff"],
+}
 _YEARS = re.compile(r"(\d+(?:\.\d+)?)\s*\+?\s*(?:years?|yrs?)\b", re.IGNORECASE)
 
 
@@ -126,6 +131,7 @@ def ground_in_description(requirements: dict, title: str, description: str) -> d
     "Kubernetes 3 years, AWS 3 years, 5 years total" for a description that names no years at all.
       - a number of years is kept only if that number is written next to "years" in the text
       - a domain is kept only if the word appears in the title or description
+      - a seniority level is kept only if one of its words appears there (Step 8)
     """
     text = f"{title}\n{description}"
     stated = {float(n) for n in _YEARS.findall(text)}
@@ -139,7 +145,16 @@ def ground_in_description(requirements: dict, title: str, description: str) -> d
         out[section] = [{**item, "min_years": keep(item.get("min_years"))} for item in requirements.get(section, [])]
     out["min_total_years"] = keep(requirements.get("min_total_years"))
     out["domain"] = [d for d in requirements.get("domain", []) if contains_phrase(norm, d)]
+    seniority = requirements.get("seniority") or "unspecified"
+    if seniority != "unspecified" and not any(contains_phrase(norm, w) for w in _SENIORITY_WORDS.get(seniority, [])):
+        out["seniority"] = "unspecified"            # Step 8: "mid" was invented for a role that never says it
     return out
+
+
+def effective_requirements(role) -> dict:
+    """The requirements exactly as matching uses them: normalised, and grounded unless a person edited them."""
+    req = normalise_skill_sections(role.requirements or {})
+    return req if req.get("edited_by_user") else ground_in_description(req, role.title, role.description)
 
 
 def normalise_requirements(llm: RoleRequirementsLLM, title: str, model: str, description: str = "") -> dict:
