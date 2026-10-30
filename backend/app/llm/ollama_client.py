@@ -7,7 +7,9 @@ Ollama endpoints we use:
   POST /api/embed    -> text(s) -> embedding vector(s)
   POST /api/chat     -> messages -> the model's reply (+ timing stats)
 """
+import json
 import logging
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -74,11 +76,13 @@ class OllamaClient:
         num_ctx: int | None = None,
         json_schema: dict | None = None,
         num_predict: int | None = None,
+        tools: list[dict] | None = None,
     ) -> dict[str, Any]:
         """
         messages: [{"role": "system"|"user"|"assistant", "content": "..."}]
         json_schema: if given, Ollama FORCES the output to match it (structured outputs).
         num_predict: maximum number of tokens to generate (protects against endless output).
+        tools: functions the model may ask to call (Step 10); its requests arrive in ["message"]["tool_calls"].
         Returns Ollama's full response: reply text in ["message"]["content"], plus timing stats.
         """
         options: dict[str, Any] = {"temperature": temperature}
@@ -90,11 +94,13 @@ class OllamaClient:
         payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
-            "stream": False,   # wait for the full answer (streaming comes in Step 10)
+            "stream": False,   # wait for the full answer (chat_stream() streams it)
             "options": options,
         }
         if json_schema:
             payload["format"] = json_schema
+        if tools:
+            payload["tools"] = tools
 
         logger.info("chat -> model=%s messages=%d temp=%s", model, len(messages), temperature)
         data = await self._request("POST", "/api/chat", payload)
@@ -103,3 +109,41 @@ class OllamaClient:
             model, data.get("prompt_eval_count"), data.get("eval_count"),
         )
         return data
+
+    async def chat_stream(
+        self,
+        messages: list[dict[str, Any]],
+        model: str,
+        tools: list[dict] | None = None,
+        temperature: float = 0.0,
+        num_ctx: int | None = None,
+        num_predict: int | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """
+        Streaming chat (Step 10): yields Ollama's chunks as they arrive, one JSON object per line:
+          {"message": {"role": "assistant", "content": "Pri"}, "done": false}
+          {"message": {"role": "assistant", "content": "", "tool_calls": [...]}, "done": false}
+          {"message": {...}, "done": true, "done_reason": "stop", "eval_count": 120, ...}
+        So the user sees the answer appear word by word instead of waiting for all of it.
+        """
+        options: dict[str, Any] = {"temperature": temperature}
+        if num_ctx:
+            options["num_ctx"] = num_ctx
+        if num_predict:
+            options["num_predict"] = num_predict
+        payload: dict[str, Any] = {"model": model, "messages": messages, "stream": True, "options": options}
+        if tools:
+            payload["tools"] = tools
+        logger.info("chat_stream -> model=%s messages=%d tools=%d", model, len(messages), len(tools or []))
+        try:
+            async with self._client.stream("POST", "/api/chat", json=payload) as response:
+                if response.status_code >= 400:
+                    body = (await response.aread()).decode(errors="replace")
+                    raise OllamaError(f"Ollama returned {response.status_code}: {body}")
+                async for line in response.aiter_lines():
+                    if line.strip():
+                        yield json.loads(line)
+        except httpx.ConnectError as exc:
+            raise OllamaError("Cannot connect to Ollama. Is it running? (check the tray icon)") from exc
+        except httpx.TimeoutException as exc:
+            raise OllamaError("Ollama did not answer within the timeout (/api/chat stream).") from exc

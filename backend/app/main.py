@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, dev, employees, health, matching, projects, resumes, search, users
+from app.api import agent, auth, dev, employees, health, matching, projects, resumes, search, users
 from app.auth.dependencies import get_current_user, require_admin
 from app.config import get_settings
 from app.db.session import engine, init_db
@@ -67,7 +67,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.8.0",
+    version="0.9.0",
     description="RAG system that matches employees to internal project roles using local LLMs (Ollama).",
     lifespan=lifespan,
 )
@@ -91,6 +91,7 @@ app.include_router(resumes.router, dependencies=signed_in)
 app.include_router(search.router, dependencies=signed_in)
 app.include_router(projects.router, dependencies=signed_in)
 app.include_router(matching.router, dependencies=signed_in)
+app.include_router(agent.router, dependencies=signed_in)
 if settings.is_development:
     app.include_router(dev.router, dependencies=[Depends(require_admin)])
 

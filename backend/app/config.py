@@ -75,6 +75,14 @@ class Settings(BaseSettings):
     judge_max_output_tokens: int = 1024      # cap on the judge's JSON answer
     judge_max_dossier_chars: int = 6000      # ~1,500 tokens of resume evidence per candidate
 
+    # ---- Agent (Step 10) ----
+    agent_model_role: Literal["fast", "quality"] = "quality"  # which LLM runs the agent (tool use needs quality)
+    agent_max_steps: int = 4                 # tool rounds per question before the agent must answer
+    agent_temperature: float = 0.0           # 0 = most predictable tool choices
+    agent_max_output_tokens: int = 1024      # cap on one reply
+    agent_history_messages: int = 10         # earlier user/assistant messages sent as memory
+    agent_tool_result_chars: int = 6000      # tool results are cut beyond this (context window protection)
+
     # ---- Authentication (Step 9) ----
     jwt_secret: str | None = None            # signs login tokens; REQUIRED in production (see .env.example)
     access_token_minutes: int = 480          # how long a login lasts (480 = one working day)
@@ -103,6 +111,10 @@ class Settings(BaseSettings):
     @property
     def max_upload_bytes(self) -> int:
         return self.max_upload_mb * 1024 * 1024
+
+    @property
+    def agent_model(self) -> str:
+        return self.fast_llm_model if self.agent_model_role == "fast" else self.quality_llm_model
 
     @property
     def judge_model(self) -> str:
