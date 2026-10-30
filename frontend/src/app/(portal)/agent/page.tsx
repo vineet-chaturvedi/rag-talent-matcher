@@ -1,24 +1,23 @@
 import type { Metadata } from "next";
 
-import { ComingSoon } from "@/components/coming-soon";
 import { PageHeader } from "@/components/layout/page-header";
+import { AgentLayout } from "@/features/agent/components/agent-layout";
+import { Chat } from "@/features/agent/components/chat";
 
 export const metadata: Metadata = { title: "Staffing assistant" };
 
-const PLANNED = [
-  "Chat with the AI agent: “Who could join a Kubernetes migration from 1 December?”",
-  "See each step live: which tool it used and what it found",
-  "Answers stream in word by word; earlier conversations are kept",
-] as const;
-
-export default function AgentPage() {
+/**
+ * A new conversation. Nothing to load, so the chat is part of the instant (prerendered) shell; the
+ * conversation itself is only created when the first question is sent (no empty conversations).
+ */
+export default function NewConversationPage() {
   return (
-    <>
+    <AgentLayout activeId={null}>
       <PageHeader
         title="Staffing assistant"
-        description="Ask the AI agent in plain language; it searches, checks availability and explains."
+        description="Ask in plain language; it searches profiles, checks availability and explains its answer."
       />
-      <ComingSoon step={13} items={PLANNED} />
-    </>
+      <Chat conversationId={null} initialTurns={[]} />
+    </AgentLayout>
   );
 }

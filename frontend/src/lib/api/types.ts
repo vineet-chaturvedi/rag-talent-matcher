@@ -44,3 +44,7 @@ export type JudgeVerdict = Schemas["JudgeVerdictOut"];
 export type MustHaveVerdict = Schemas["MustHaveVerdictOut"];
 export type SkillMatch = Schemas["SkillMatchOut"];
 export type ScoreBreakdown = Schemas["ScoreBreakdown"];
+
+export type Conversation = Schemas["ConversationOut"];
+export type ConversationDetail = Schemas["ConversationDetail"];
+export type AgentMessage = Schemas["MessageOut"];

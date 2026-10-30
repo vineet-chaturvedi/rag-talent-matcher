@@ -1321,6 +1321,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Summary */
+            summary?: string | null;
         };
         /** ModelHealth */
         ModelHealth: {

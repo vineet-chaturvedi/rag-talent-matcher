@@ -34,6 +34,8 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Pages only. Not /api (FastAPI checks those itself), Next.js internals, or files like favicon.ico.
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt)$).*)"],
+  // Pages only. Not /api (FastAPI checks those itself), not /bff (Route Handlers answer 401 as JSON,
+  // which browser code can handle; a redirect to the HTML login page would not be), Next.js internals,
+  // or files like favicon.ico.
+  matcher: ["/((?!api|bff|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt)$).*)"],
 };
