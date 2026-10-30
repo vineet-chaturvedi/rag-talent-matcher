@@ -20,7 +20,7 @@ from app.agent.prompts import system_prompt
 from app.agent.tools import ToolContext, run_tool, tool_specs
 
 
-def _summary(name: str, result: dict) -> str:
+def summarise_tool_result(name: str, result: dict) -> str:
     """One line for the progress display: what came back from a tool."""
     if "error" in result:
         return f"error: {result['error']}"
@@ -78,4 +78,4 @@ async def run_agent(ctx: ToolContext, model: str, history: list[dict], question:
             messages.append({"role": "tool", "tool_name": call["name"], "content": text})
             yield {"type": "_save", "message": {"role": "tool", "tool_name": call["name"], "content": text}}
             yield {"type": "tool_result", "name": call["name"], "ok": "error" not in result,
-                   "summary": _summary(call["name"], result)}
+                   "summary": summarise_tool_result(call["name"], result)}

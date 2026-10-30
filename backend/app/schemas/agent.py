@@ -17,6 +17,7 @@ class MessageOut(BaseModel):
     tool_calls: list | None
     tool_name: str | None
     created_at: datetime
+    summary: str | None = None     # tool messages: the same one-line summary the live stream showed (Step 13)
 
 
 class ConversationOut(BaseModel):

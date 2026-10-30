@@ -19,7 +19,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.agent.loop import run_agent
+from app.agent.loop import run_agent, summarise_tool_result
 from app.agent.tools import ToolContext
 from app.api.deps import get_db, get_ollama
 from app.auth.dependencies import get_current_user
@@ -27,7 +27,9 @@ from app.config import Settings, get_settings
 from app.db.models import AgentConversation, AgentMessage, User
 from app.db.session import SessionLocal
 from app.llm.ollama_client import OllamaClient, OllamaError
-from app.schemas.agent import AskRequest, AskResponse, ConversationCreate, ConversationDetail, ConversationOut
+from app.schemas.agent import (
+    AskRequest, AskResponse, ConversationCreate, ConversationDetail, ConversationOut, MessageOut,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/agent", tags=["agent"])
@@ -57,10 +59,24 @@ async def list_conversations(db: AsyncSession = Depends(get_db), user: User = De
                              .order_by(AgentConversation.updated_at.desc(), AgentConversation.id.desc()))).all()
 
 
+def _message_out(m: AgentMessage) -> MessageOut:
+    out = MessageOut.model_validate(m)
+    if m.role == "tool" and m.tool_name:
+        try:
+            out.summary = summarise_tool_result(m.tool_name, json.loads(m.content))
+        except (ValueError, TypeError, KeyError, AttributeError):
+            out.summary = None       # an old or unusual result: the page shows the tool name only
+    return out
+
+
 @router.get("/conversations/{conversation_id}", response_model=ConversationDetail)
 async def get_conversation(conversation_id: int, db: AsyncSession = Depends(get_db),
                            user: User = Depends(get_current_user)):
-    return await _own_conversation(db, conversation_id, user, with_messages=True)
+    conv = await _own_conversation(db, conversation_id, user, with_messages=True)
+    return ConversationDetail(
+        id=conv.id, title=conv.title, created_at=conv.created_at, updated_at=conv.updated_at,
+        messages=[_message_out(m) for m in sorted(conv.messages, key=lambda m: m.id)],
+    )
 
 
 @router.delete("/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
