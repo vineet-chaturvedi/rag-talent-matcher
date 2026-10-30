@@ -15,11 +15,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db, get_ollama
 from app.config import Settings, get_settings
 from app.llm.ollama_client import OllamaClient, OllamaError, normalize_model_name
+from app.schemas.overview import HealthOut
 
 router = APIRouter(prefix="/api", tags=["health"])
 
 
-@router.get("/health")
+@router.get("/health", response_model=HealthOut,
+            responses={503: {"model": HealthOut, "description": "Database or Ollama unreachable"}})
 async def health(
     ollama: OllamaClient = Depends(get_ollama),
     settings: Settings = Depends(get_settings),
