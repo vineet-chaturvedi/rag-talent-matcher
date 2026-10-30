@@ -1,0 +1,118 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens. Every colour has a NAME, defined once here; components use the names
+ * (bg-primary, text-muted-foreground, border-border), never raw colour values. Re-theming the portal
+ * means editing these lines, and dark mode is just a second set of values.
+ *
+ * The names follow shadcn/ui's convention (background/foreground, primary/primary-foreground, ...),
+ * so components from the shadcn/ui catalogue can be added later and fit in without changes.
+ * Colours use OKLCH: equal steps in lightness look equally different to the eye, which makes
+ * accessible contrast easier to get right than with hex.
+ */
+:root {
+  --radius: 0.5rem;
+
+  --background: oklch(0.982 0.003 255);
+  --foreground: oklch(0.21 0.02 262);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--foreground);
+  --popover: oklch(1 0 0);
+  --popover-foreground: var(--foreground);
+  --muted: oklch(0.955 0.005 255);
+  --muted-foreground: oklch(0.5 0.02 258);
+  --accent: oklch(0.955 0.012 265);
+  --accent-foreground: oklch(0.3 0.06 265);
+  --border: oklch(0.91 0.006 255);
+  --input: oklch(0.88 0.008 255);
+  --ring: oklch(0.55 0.17 268);
+
+  --primary: oklch(0.5 0.19 268);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.955 0.005 255);
+  --secondary-foreground: oklch(0.25 0.02 262);
+  --destructive: oklch(0.55 0.2 27);
+  --destructive-foreground: oklch(0.985 0 0);
+  --success: oklch(0.52 0.12 155);
+  --warning: oklch(0.6 0.13 70);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: oklch(0.17 0.012 262);
+    --foreground: oklch(0.93 0.008 255);
+    --card: oklch(0.21 0.014 262);
+    --popover: oklch(0.23 0.014 262);
+    --muted: oklch(0.25 0.014 262);
+    --muted-foreground: oklch(0.7 0.015 258);
+    --accent: oklch(0.27 0.03 265);
+    --accent-foreground: oklch(0.9 0.04 265);
+    --border: oklch(0.3 0.014 262);
+    --input: oklch(0.34 0.014 262);
+    --ring: oklch(0.7 0.14 268);
+
+    --primary: oklch(0.7 0.14 268);
+    --primary-foreground: oklch(0.17 0.02 262);
+    --secondary: oklch(0.26 0.014 262);
+    --secondary-foreground: oklch(0.93 0.008 255);
+    --destructive: oklch(0.7 0.16 25);
+    --destructive-foreground: oklch(0.17 0.02 262);
+    --success: oklch(0.75 0.13 155);
+    --warning: oklch(0.8 0.13 75);
+  }
+}
+
+/* Make the tokens available as Tailwind classes: bg-card, text-muted-foreground, border-border, ... */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 6px);
+
+  /* System fonts: nothing to download, works on an offline company network, native on Windows. */
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    color-scheme: light dark;
+  }
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+  }
+  /* Respect the OS "reduce motion" setting: no pulsing skeletons or spinning icons. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
