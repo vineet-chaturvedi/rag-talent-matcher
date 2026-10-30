@@ -5,8 +5,8 @@ import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/componen
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn, formatNumber } from "@/lib/utils";
 
-import { IN_PROGRESS, PIPELINE_STAGES } from "../labels";
-import { getQueueStats } from "../queries";
+import { IN_PROGRESS, PIPELINE_STAGES } from "@/features/resumes/labels";
+import { getQueueStats } from "@/features/resumes/queries";
 
 /** Where every current resume is in the pipeline (upload -> text -> AI profile -> searchable). */
 export async function PipelineCard() {

@@ -1,7 +1,8 @@
 "use client";
 
-import { ChevronsUpDown, LogOut } from "lucide-react";
-import { useId } from "react";
+import { ChevronsUpDown, LogOut, UserRound } from "lucide-react";
+import Link from "next/link";
+import { useRef } from "react";
 
 import {
   DropdownMenu,
@@ -28,10 +29,10 @@ const ROLE_LABEL: Record<SessionUser["role"], string> = {
  * Importing a Server Action into a Client Component is allowed: what the browser gets is only a
  * reference (an ID) to call it on the server, never its code.
  *
- * Why the <form> sits OUTSIDE the menu and the button points at it with form={id}: Radix renders the
- * open menu in a "portal" at the end of <body> (so it can't be clipped by the sidebar). A button
- * moved there is no longer inside the <form>, and clicking it submitted nothing. (Found by the
- * Playwright sign-out test.) The HTML `form` attribute connects a button to a form anywhere on the page.
+ * Why the <form> sits OUTSIDE the menu and the item calls requestSubmit(): Radix renders the open
+ * menu in a "portal" at the end of <body>, so a submit button there is not inside the form; and
+ * selecting an item closes the menu, removing the item before the browser would submit. Two
+ * browser-test findings (Step 11b, Step 12): the reliable way is to submit the form in code.
  */
 export function AccountMenu({ user }: { user: SessionUser }) {
   const initials = user.fullName
@@ -40,11 +41,11 @@ export function AccountMenu({ user }: { user: SessionUser }) {
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
 
-  const formId = useId();
+  const formRef = useRef<HTMLFormElement>(null);
 
   return (
     <DropdownMenu>
-      <form id={formId} action={logout} hidden />
+      <form ref={formRef} action={logout} hidden />
       <DropdownMenuTrigger className="flex w-full items-center gap-2.5 rounded-md p-1.5 text-left text-sm outline-none hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:bg-muted">
         <span
           aria-hidden
@@ -65,11 +66,14 @@ export function AccountMenu({ user }: { user: SessionUser }) {
           <span className="block text-xs text-muted-foreground">{user.email}</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {/* asChild: the menu item IS the submit button, so keyboard Enter on it submits the form. */}
         <DropdownMenuItem asChild>
-          <button type="submit" form={formId} className="w-full">
-            <LogOut aria-hidden /> Sign out
-          </button>
+          <Link href="/account">
+            <UserRound aria-hidden /> Account and password
+          </Link>
+        </DropdownMenuItem>
+        {/* onSelect fires for a click AND for Enter/Space on the focused item. */}
+        <DropdownMenuItem onSelect={() => formRef.current?.requestSubmit()}>
+          <LogOut aria-hidden /> Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

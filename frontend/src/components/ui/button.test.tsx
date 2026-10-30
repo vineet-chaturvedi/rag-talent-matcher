@@ -12,11 +12,11 @@ describe("Button", () => {
   it("asChild puts the button styles on the child (a link stays a link)", () => {
     render(
       <Button asChild variant="outline">
-        <a href="/projects">Open projects</a>
+        <a href="https://example.com/help">Open help</a>
       </Button>,
     );
-    const link = screen.getByRole("link", { name: "Open projects" });
-    expect(link).toHaveAttribute("href", "/projects");
+    const link = screen.getByRole("link", { name: "Open help" });
+    expect(link).toHaveAttribute("href", "https://example.com/help");
     expect(link.className).toContain("border-input");
     expect(screen.queryByRole("button")).toBeNull();
   });

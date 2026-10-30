@@ -22,3 +22,25 @@ export type Project = Schemas["ProjectOut"];
 export type ProjectRole = Schemas["RoleOut"];
 export type ProjectStatus = Schemas["ProjectStatus"];
 export type Employee = Schemas["EmployeeListItem"];
+
+export type EmployeeDetail = Schemas["EmployeeDetail"];
+export type AvailabilityStatus = Schemas["AvailabilityStatus"];
+export type EmployeeImportResult = Schemas["EmployeeImportResult"];
+export type Resume = Schemas["ResumeOut"];
+export type ResumeListItem = Schemas["ResumeListItem"];
+export type BulkUploadResult = Schemas["BulkUploadResult"];
+export type Profile = Schemas["ProfileOut"];
+export type ProfileSkill = Schemas["ProfileSkillOut"];
+export type ProfileJob = Schemas["ProfileJobOut"];
+
+export type RoleStatus = Schemas["RoleStatus"];
+export type Requirements = Schemas["Requirements"];
+export type RequiredSkill = Schemas["RequiredSkill"];
+export type MatchRun = Schemas["MatchRunOut"];
+export type MatchRunStatus = Schemas["MatchRunStatus"];
+export type MatchRunSummary = Schemas["MatchRunSummary"];
+export type MatchResult = Schemas["MatchResultOut"];
+export type JudgeVerdict = Schemas["JudgeVerdictOut"];
+export type MustHaveVerdict = Schemas["MustHaveVerdictOut"];
+export type SkillMatch = Schemas["SkillMatchOut"];
+export type ScoreBreakdown = Schemas["ScoreBreakdown"];

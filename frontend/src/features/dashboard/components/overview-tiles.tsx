@@ -1,7 +1,9 @@
 import { Alert } from "@/components/ui/alert";
 import { formatNumber } from "@/lib/utils";
 
-import { getOverview, getQueueStats } from "../queries";
+import { getQueueStats } from "@/features/resumes/queries";
+
+import { getOverview } from "../queries";
 import { StatTile, StatTileSkeleton } from "./stat-tile";
 
 /**

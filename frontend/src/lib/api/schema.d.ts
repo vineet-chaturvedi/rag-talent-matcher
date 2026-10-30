@@ -399,6 +399,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Project */
+        get: operations["get_project_api_projects__project_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/roles": {
         parameters: {
             query?: never;
@@ -430,7 +447,8 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** Update Role */
+        patch: operations["update_role_api_roles__role_id__patch"];
         trace?: never;
     };
     "/api/roles/{role_id}/requirements/parse": {
@@ -692,6 +710,20 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
+        /** AvailabilityFacts */
+        AvailabilityFacts: {
+            status: components["schemas"]["AvailabilityStatus"];
+            /** Allocation Percent */
+            allocation_percent: number;
+            /** Free Percent */
+            free_percent: number;
+            /** Available From */
+            available_from?: string | null;
+            /** Fits */
+            fits: boolean;
+            /** Note */
+            note: string;
+        };
         /** AvailabilityOut */
         AvailabilityOut: {
             status: components["schemas"]["AvailabilityStatus"];
@@ -913,6 +945,15 @@ export interface components {
             /** Error */
             error?: string | null;
         };
+        /** EducationOut */
+        EducationOut: {
+            /** Degree */
+            degree?: string | null;
+            /** Institution */
+            institution?: string | null;
+            /** Year */
+            year?: string | null;
+        };
         /** EmployeeCounts */
         EmployeeCounts: {
             /** Total */
@@ -1012,6 +1053,27 @@ export interface components {
             /** Matched Chunks */
             matched_chunks: components["schemas"]["MatchedChunk"][];
         };
+        /** Explanation */
+        Explanation: {
+            /**
+             * @default {
+             *       "must_matched": [],
+             *       "must_missing": [],
+             *       "nice_matched": [],
+             *       "keyword_snippets": []
+             *     }
+             */
+            facts: components["schemas"]["RetrievalFacts"];
+            judge?: components["schemas"]["JudgeVerdictOut"] | null;
+            /**
+             * Judge Status
+             * @default not_requested
+             * @enum {string}
+             */
+            judge_status: "pending" | "done" | "failed" | "not_requested";
+            /** Judge Error */
+            judge_error?: string | null;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1030,6 +1092,62 @@ export interface components {
             status: "ok" | "degraded" | "error";
             database: components["schemas"]["DatabaseHealth"];
             ollama: components["schemas"]["OllamaHealth"];
+        };
+        /** JudgeStats */
+        JudgeStats: {
+            /** Model */
+            model?: string | null;
+            /** Seconds */
+            seconds?: number | null;
+            /** Prompt Tokens */
+            prompt_tokens?: number | null;
+            /** Output Tokens */
+            output_tokens?: number | null;
+        };
+        /**
+         * JudgeVerdictOut
+         * @description The LLM judge's verdict AFTER code verified its quotes and computed the score (Step 8).
+         */
+        JudgeVerdictOut: {
+            /**
+             * Rating
+             * @enum {string}
+             */
+            rating: "strong" | "good" | "partial" | "weak";
+            /** Summary */
+            summary: string;
+            /**
+             * Must Haves
+             * @default []
+             */
+            must_haves: components["schemas"]["MustHaveVerdictOut"][];
+            /**
+             * Strengths
+             * @default []
+             */
+            strengths: components["schemas"]["StrengthOut"][];
+            /**
+             * Gaps
+             * @default []
+             */
+            gaps: string[];
+            /** Judge Score */
+            judge_score?: number | null;
+            /**
+             * Quotes Verified
+             * @default 0
+             */
+            quotes_verified: number;
+            /**
+             * Quotes Total
+             * @default 0
+             */
+            quotes_total: number;
+            stats?: components["schemas"]["JudgeStats"] | null;
+            /** Llm Output */
+            llm_output?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -1078,14 +1196,8 @@ export interface components {
             location: string | null;
             /** Final Score */
             final_score: number;
-            /** Score Breakdown */
-            score_breakdown: {
-                [key: string]: unknown;
-            };
-            /** Explanation */
-            explanation: {
-                [key: string]: unknown;
-            } | null;
+            score_breakdown: components["schemas"]["ScoreBreakdown"];
+            explanation: components["schemas"]["Explanation"];
         };
         /** MatchRunCounts */
         MatchRunCounts: {
@@ -1118,12 +1230,35 @@ export interface components {
             judged: number;
             /** To Judge */
             to_judge: number;
-            /** Settings */
-            settings: {
-                [key: string]: unknown;
-            } | null;
+            settings: components["schemas"]["MatchRunSettings"] | null;
             /** Results */
             results: components["schemas"]["MatchResultOut"][];
+        };
+        /**
+         * MatchRunSettings
+         * @description What the run was started with, kept for audit: rerunning later may give different results.
+         */
+        MatchRunSettings: {
+            /** Top K */
+            top_k: number;
+            /** Judge Top N */
+            judge_top_n: number;
+            /**
+             * Only Available
+             * @default false
+             */
+            only_available: boolean;
+            /** Judge Weight */
+            judge_weight?: number | null;
+            /** Judge Model */
+            judge_model?: string | null;
+            /** Embed Model */
+            embed_model?: string | null;
+            requirements?: components["schemas"]["Requirements"] | null;
+            /** Retrieval Timings */
+            retrieval_timings?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * MatchRunStatus
@@ -1144,6 +1279,21 @@ export interface components {
             finished_at: string | null;
             /** Top */
             top: string[];
+            /**
+             * Top Names
+             * @default []
+             */
+            top_names: string[];
+            /**
+             * Judge Top N
+             * @default 0
+             */
+            judge_top_n: number;
+            /**
+             * Result Count
+             * @default 0
+             */
+            result_count: number;
         };
         /** MatchedChunk */
         MatchedChunk: {
@@ -1178,6 +1328,27 @@ export interface components {
             name: string;
             /** Installed */
             installed: boolean;
+        };
+        /** MustHaveVerdictOut */
+        MustHaveVerdictOut: {
+            /** Requirement */
+            requirement: string;
+            /**
+             * Met
+             * @enum {string}
+             */
+            met: "yes" | "partly" | "no";
+            /** Claimed */
+            claimed?: ("yes" | "partly" | "no") | null;
+            /** Quote */
+            quote?: string | null;
+            /**
+             * Verified
+             * @default false
+             */
+            verified: boolean;
+            /** Note */
+            note?: string | null;
         };
         /** OllamaHealth */
         OllamaHealth: {
@@ -1247,9 +1418,7 @@ export interface components {
             /** Experience */
             experience: components["schemas"]["ProfileJobOut"][];
             /** Education */
-            education: {
-                [key: string]: unknown;
-            }[];
+            education: components["schemas"]["EducationOut"][];
             /** Certifications */
             certifications: string[];
             /** Rejected Skills */
@@ -1341,6 +1510,14 @@ export interface components {
              * @default 0
              */
             vector_count: number;
+        };
+        /**
+         * RequeueResult
+         * @description Answer of the bulk maintenance actions (re-extract / re-embed everything).
+         */
+        RequeueResult: {
+            /** Requeued */
+            requeued: number;
         };
         /** RequiredSkill */
         RequiredSkill: {
@@ -1435,6 +1612,42 @@ export interface components {
             /** Text */
             text: string | null;
         };
+        /**
+         * ResumeListItem
+         * @description A resume in the admin list (Step 12): with WHOSE resume it is, so the page needs no extra lookups.
+         */
+        ResumeListItem: {
+            /** Id */
+            id: number;
+            /** Employee Id */
+            employee_id: number;
+            /** Original Filename */
+            original_filename: string;
+            /** Mime Type */
+            mime_type: string;
+            /** File Size Bytes */
+            file_size_bytes: number;
+            /** Is Current */
+            is_current: boolean;
+            status: components["schemas"]["ResumeStatus"];
+            /** Error Message */
+            error_message: string | null;
+            /** Attempts */
+            attempts: number;
+            /** Page Count */
+            page_count: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Processed At */
+            processed_at: string | null;
+            /** Employee Code */
+            employee_code: string;
+            /** Employee Name */
+            employee_name: string;
+        };
         /** ResumeOut */
         ResumeOut: {
             /** Id */
@@ -1469,6 +1682,33 @@ export interface components {
          * @enum {string}
          */
         ResumeStatus: "queued" | "parsing" | "parsed" | "extracting" | "extracted" | "embedding" | "ready" | "failed";
+        /**
+         * RetrievalFacts
+         * @description What retrieval found (Step 7), saved with the result so the page needs no re-run.
+         */
+        RetrievalFacts: {
+            /**
+             * Must Matched
+             * @default []
+             */
+            must_matched: components["schemas"]["SkillMatchOut"][];
+            /**
+             * Must Missing
+             * @default []
+             */
+            must_missing: string[];
+            /**
+             * Nice Matched
+             * @default []
+             */
+            nice_matched: components["schemas"]["SkillMatchOut"][];
+            /**
+             * Keyword Snippets
+             * @default []
+             */
+            keyword_snippets: string[];
+            availability?: components["schemas"]["AvailabilityFacts"] | null;
+        };
         /** RoleCounts */
         RoleCounts: {
             /** Total */
@@ -1542,6 +1782,28 @@ export interface components {
          * @enum {string}
          */
         RoleStatus: "open" | "filled" | "closed";
+        /**
+         * RoleUpdate
+         * @description Only the fields you send are changed (Step 12b). Changing the description does NOT re-parse:
+         *     the stored requirements may have been corrected by a person, so re-parsing stays an explicit choice.
+         */
+        RoleUpdate: {
+            /** Title */
+            title?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Location */
+            location?: string | null;
+            /** Allocation Percent */
+            allocation_percent?: number | null;
+            /** Start Date */
+            start_date?: string | null;
+            /** Headcount */
+            headcount?: number | null;
+            /** Min Experience Years */
+            min_experience_years?: number | null;
+            status?: components["schemas"]["RoleStatus"] | null;
+        };
         /** RowError */
         RowError: {
             /** Line */
@@ -1550,6 +1812,88 @@ export interface components {
             employee_code: string | null;
             /** Message */
             message: string;
+        };
+        /**
+         * ScoreBreakdown
+         * @description How the rule score was computed (Step 8): fit = 0.85*skills + 0.15*relevance, times the factors.
+         */
+        ScoreBreakdown: {
+            /**
+             * Skills
+             * @default 0
+             */
+            skills: number;
+            /**
+             * Relevance
+             * @default 0
+             */
+            relevance: number;
+            /**
+             * Experience
+             * @default 1
+             */
+            experience: number;
+            /**
+             * Availability
+             * @default 1
+             */
+            availability: number;
+            /**
+             * Location
+             * @default 1
+             */
+            location: number;
+            /**
+             * Fit
+             * @default 0
+             */
+            fit: number;
+            /**
+             * @default {
+             *       "experience": 1,
+             *       "availability": 1,
+             *       "location": 1
+             *     }
+             */
+            factors: components["schemas"]["ScoreFactors"];
+            /**
+             * Rule Score
+             * @default 0
+             */
+            rule_score: number;
+            /** Total Years */
+            total_years?: number | null;
+            /** Required Years */
+            required_years?: number | null;
+            /**
+             * Retrieval Ranks
+             * @default {}
+             */
+            retrieval_ranks: {
+                [key: string]: number | null;
+            };
+            /** Judge Score */
+            judge_score?: number | null;
+            /** Final Score */
+            final_score?: number | null;
+        };
+        /** ScoreFactors */
+        ScoreFactors: {
+            /**
+             * Experience
+             * @default 1
+             */
+            experience: number;
+            /**
+             * Availability
+             * @default 1
+             */
+            availability: number;
+            /**
+             * Location
+             * @default 1
+             */
+            location: number;
         };
         /** SemanticSearchRequest */
         SemanticSearchRequest: {
@@ -1613,6 +1957,18 @@ export interface components {
             evidence: string | null;
             /** Weight */
             weight: number;
+        };
+        /** StrengthOut */
+        StrengthOut: {
+            /** Point */
+            point: string;
+            /** Quote */
+            quote?: string | null;
+            /**
+             * Verified
+             * @default false
+             */
+            verified: boolean;
         };
         /** TokenResponse */
         TokenResponse: {
@@ -1991,6 +2347,8 @@ export interface operations {
             query?: {
                 /** @description Matches code, name, department or location */
                 search?: string | null;
+                /** @description Only people with this availability */
+                availability?: components["schemas"]["AvailabilityStatus"] | null;
                 limit?: number;
                 offset?: number;
             };
@@ -2139,7 +2497,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ResumeOut"][];
+                    "application/json": components["schemas"]["ResumeListItem"][];
                 };
             };
             /** @description Validation Error */
@@ -2188,7 +2546,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["RequeueResult"];
                 };
             };
         };
@@ -2208,7 +2566,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["RequeueResult"];
                 };
             };
         };
@@ -2454,6 +2812,37 @@ export interface operations {
             };
         };
     };
+    get_project_api_projects__project_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_role_api_projects__project_id__roles_post: {
         parameters: {
             query?: never;
@@ -2499,6 +2888,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_role_api_roles__role_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleUpdate"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

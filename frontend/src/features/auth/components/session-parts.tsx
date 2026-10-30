@@ -1,4 +1,4 @@
-import { NavLinks } from "@/components/layout/nav-links";
+import { NavLinks, NavLinksStatic } from "@/components/layout/nav-links";
 import { navItemsFor } from "@/components/layout/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -18,7 +18,7 @@ export async function RoleNav() {
 
 /** While the role is unknown, show the links everyone has: no layout jump for most users. */
 export function RoleNavFallback() {
-  return <NavLinks items={navItemsFor(null)} />;
+  return <NavLinksStatic items={navItemsFor(null)} />;
 }
 
 export async function AccountSlot() {

@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 
-import type { NavIcon, NavItem } from "./navigation";
+import { isActive, type NavIcon, type NavItem } from "./navigation";
 
 const ICONS: Record<NavIcon, LucideIcon> = {
   dashboard: LayoutDashboard,
@@ -18,15 +18,30 @@ const ICONS: Record<NavIcon, LucideIcon> = {
 };
 
 /**
- * The menu links. A Client Component only because it needs the current URL (usePathname) to mark
- * the active page; everything else about the shell renders on the server.
+ * The menu links, with the current page marked. A Client Component only because it needs the current
+ * URL (usePathname); everything else about the shell renders on the server.
  */
 export function NavLinks({ items }: { items: readonly NavItem[] }) {
   const pathname = usePathname();
+  return <NavList items={items} pathname={pathname} />;
+}
+
+/**
+ * The same list WITHOUT reading the URL, for the loading fallback.
+ * Why: a Suspense fallback is part of the prerendered shell, and on a dynamic route such as
+ * /employees/[id] the URL isn't known when that shell is built. A fallback that calls usePathname()
+ * fails the build ("URL data in a Client Component outside of Suspense"). Found when the first dynamic
+ * route was added in Step 12.
+ */
+export function NavLinksStatic({ items }: { items: readonly NavItem[] }) {
+  return <NavList items={items} pathname={null} />;
+}
+
+function NavList({ items, pathname }: { items: readonly NavItem[]; pathname: string | null }) {
   return (
     <ul className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
       {items.map((item) => {
-        const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+        const active = pathname !== null && isActive(item, pathname);
         const Icon = ICONS[item.icon];
         return (
           <li key={item.href} className="shrink-0">

@@ -14,8 +14,6 @@ import type { Health } from "@/lib/api/types";
 
 export const getOverview = () => request((api) => api.GET("/api/overview"));
 
-export const getQueueStats = () => request((api) => api.GET("/api/resumes/stats"));
-
 export const getProjects = () => request((api) => api.GET("/api/projects"));
 
 /**
