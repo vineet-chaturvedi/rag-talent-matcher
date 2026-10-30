@@ -41,7 +41,8 @@ def _to_out(run: MatchRun) -> MatchRunOut:
         results=[MatchResultOut(
             rank=r.rank, employee_id=r.employee_id, employee_code=r.employee.employee_code,
             full_name=r.employee.full_name, designation=r.employee.designation, location=r.employee.location,
-            final_score=r.final_score, score_breakdown=r.score_breakdown, explanation=r.explanation,
+            final_score=r.final_score,
+            score_breakdown=r.score_breakdown or {}, explanation=r.explanation or {},
         ) for r in results],
     )
 
@@ -88,7 +89,12 @@ async def list_match_runs(role_id: int, db: AsyncSession = Depends(get_db)):
         select(MatchRun).where(MatchRun.role_id == role_id).order_by(MatchRun.id.desc())
         .options(selectinload(MatchRun.results).selectinload(MatchResult.employee))
     )).all()
-    return [MatchRunSummary(
-        id=r.id, status=r.status, started_at=r.started_at, finished_at=r.finished_at,
-        top=[x.employee.employee_code for x in sorted(r.results, key=lambda x: x.rank)[:3]],
-    ) for r in runs]
+    summaries = []
+    for r in runs:
+        top = sorted(r.results, key=lambda x: x.rank)[:3]
+        summaries.append(MatchRunSummary(
+            id=r.id, status=r.status, started_at=r.started_at, finished_at=r.finished_at,
+            top=[x.employee.employee_code for x in top], top_names=[x.employee.full_name for x in top],
+            judge_top_n=(r.settings or {}).get("judge_top_n", 0), result_count=len(r.results),
+        ))
+    return summaries

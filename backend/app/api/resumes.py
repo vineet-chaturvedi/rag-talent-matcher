@@ -24,11 +24,14 @@ from app.auth.dependencies import require_admin
 from app.config import Settings, get_settings
 from app.db.enums import ResumeStatus
 from app.db.models import Employee, Resume, ResumeSkill, User
+from app.extraction.postprocess import ground_education
 from app.ingestion.storage import InvalidFileError
 from app.ingestion.worker import IngestionWorker
 from app.rag.vector_store import get_vector_store
 from app.schemas.profile import ProfileOut
-from app.schemas.resume import BulkUploadResult, QueueStats, ResumeDetail, ResumeOut, UploadItemResult
+from app.schemas.resume import (
+    BulkUploadResult, QueueStats, RequeueResult, ResumeDetail, ResumeListItem, ResumeOut, UploadItemResult,
+)
 from app.services.indexing import requeue_for_embedding
 from app.services.resumes import (
     DuplicateResumeError, add_resume, delete_resume, employee_code_from_filename, requeue_for_extraction,
@@ -105,7 +108,7 @@ async def bulk_upload(
     return BulkUploadResult(uploaded=uploaded, failed=len(items) - uploaded, items=items)
 
 
-@router.get("/api/resumes", response_model=list[ResumeOut])
+@router.get("/api/resumes", response_model=list[ResumeListItem])
 async def list_resumes(
     status_filter: ResumeStatus | None = Query(None, alias="status"),
     current_only: bool = True,
@@ -113,12 +116,18 @@ async def list_resumes(
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
 ):
-    stmt = select(Resume).order_by(Resume.id.desc()).limit(limit).offset(offset)
+    # selectinload: the employees of this page in ONE extra query (not one per row: the "N+1" problem).
+    stmt = (select(Resume).options(selectinload(Resume.employee))
+            .order_by(Resume.id.desc()).limit(limit).offset(offset))
     if status_filter is not None:
         stmt = stmt.where(Resume.status == status_filter)
     if current_only:
         stmt = stmt.where(Resume.is_current.is_(True))
-    return (await db.scalars(stmt)).all()
+    return [
+        ResumeListItem(**ResumeOut.model_validate(r).model_dump(),
+                       employee_code=r.employee.employee_code, employee_name=r.employee.full_name)
+        for r in (await db.scalars(stmt)).all()
+    ]
 
 
 @router.get("/api/resumes/stats", response_model=QueueStats)
@@ -135,21 +144,21 @@ async def queue_stats(
                       vector_count=await asyncio.to_thread(get_vector_store().count))
 
 
-@router.post("/api/resumes/reextract", dependencies=[Depends(require_admin)])
+@router.post("/api/resumes/reextract", response_model=RequeueResult, dependencies=[Depends(require_admin)])
 async def reextract_all(
     db: AsyncSession = Depends(get_db),
     worker: IngestionWorker | None = Depends(get_worker),
 ):
     count = await requeue_for_extraction(db)
     _wake(worker)
-    return {"requeued": count}
+    return RequeueResult(requeued=count)
 
 
-@router.post("/api/resumes/reembed", dependencies=[Depends(require_admin)])
+@router.post("/api/resumes/reembed", response_model=RequeueResult, dependencies=[Depends(require_admin)])
 async def reembed_all(worker: IngestionWorker | None = Depends(get_worker)):
     count = await requeue_for_embedding()
     _wake(worker)
-    return {"requeued": count}
+    return RequeueResult(requeued=count)
 
 
 @router.get("/api/resumes/{resume_id}", response_model=ResumeDetail)
@@ -204,7 +213,8 @@ async def get_profile(resume_id: int, db: AsyncSession = Depends(get_db)):
              "is_current": e.is_current, "description": e.description}
             for e in sorted(resume.experiences, key=lambda e: e.start_date or date.min, reverse=True)
         ],
-        education=profile.education or [],
+        # Old profiles were saved before education years were grounded; cleaning on read is cheap.
+        education=ground_education(profile.education or [], resume.raw_text or ""),
         certifications=profile.certifications or [],
         rejected_skills=raw.get("rejected_skills", []),
         warnings=raw.get("warnings", []),

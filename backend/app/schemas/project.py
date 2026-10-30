@@ -27,6 +27,19 @@ class RoleCreate(BaseModel):
     min_experience_years: float | None = Field(None, ge=0, le=50)
 
 
+class RoleUpdate(BaseModel):
+    """Only the fields you send are changed (Step 12b). Changing the description does NOT re-parse:
+    the stored requirements may have been corrected by a person, so re-parsing stays an explicit choice."""
+    title: str | None = Field(None, min_length=2, max_length=200)
+    description: str | None = Field(None, min_length=20)
+    location: str | None = Field(None, max_length=100)
+    allocation_percent: int | None = Field(None, ge=1, le=100)
+    start_date: date | None = None
+    headcount: int | None = Field(None, ge=1, le=50)
+    min_experience_years: float | None = Field(None, ge=0, le=50)
+    status: RoleStatus | None = None
+
+
 class RequiredSkill(BaseModel):
     name: str
     min_years: float | None = None

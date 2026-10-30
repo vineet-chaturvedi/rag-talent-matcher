@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_db
 from app.auth.dependencies import require_admin
+from app.db.enums import AvailabilityStatus
 from app.db.models import Employee, Resume
 from app.schemas.employee import EmployeeDetail, EmployeeImportResult, EmployeeListItem
 from app.schemas.resume import ResumeOut
@@ -38,6 +39,7 @@ async def import_employees(
 @router.get("", response_model=list[EmployeeListItem])
 async def list_employees(
     search: str | None = Query(None, description="Matches code, name, department or location"),
+    availability: AvailabilityStatus | None = Query(None, description="Only people with this availability"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
@@ -49,6 +51,8 @@ async def list_employees(
             Employee.employee_code.ilike(pattern), Employee.full_name.ilike(pattern),
             Employee.department.ilike(pattern), Employee.location.ilike(pattern),
         ))
+    if availability is not None:
+        stmt = stmt.where(Employee.availability_status == availability)
     employees = (await db.scalars(stmt)).all()
 
     # One extra query for the current resumes of exactly these employees (not one query per employee).

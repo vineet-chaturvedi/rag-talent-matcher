@@ -4,6 +4,12 @@ from datetime import date
 from pydantic import BaseModel
 
 
+class EducationOut(BaseModel):
+    degree: str | None = None
+    institution: str | None = None
+    year: str | None = None
+
+
 class ProfileSkillOut(BaseModel):
     name: str
     category: str | None
@@ -32,7 +38,7 @@ class ProfileOut(BaseModel):
     total_experience_years: float | None
     skills: list[ProfileSkillOut]
     experience: list[ProfileJobOut]
-    education: list[dict]
+    education: list[EducationOut]
     certifications: list[str]
     rejected_skills: list[dict]     # what the hallucination check removed
     warnings: list[str]

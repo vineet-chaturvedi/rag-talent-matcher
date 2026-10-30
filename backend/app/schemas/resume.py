@@ -26,6 +26,17 @@ class ResumeOut(BaseModel):
     processed_at: datetime | None
 
 
+class ResumeListItem(ResumeOut):
+    """A resume in the admin list (Step 12): with WHOSE resume it is, so the page needs no extra lookups."""
+    employee_code: str
+    employee_name: str
+
+
+class RequeueResult(BaseModel):
+    """Answer of the bulk maintenance actions (re-extract / re-embed everything)."""
+    requeued: int
+
+
 class ResumeDetail(ResumeOut):
     employee_code: str
     employee_name: str

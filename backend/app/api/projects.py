@@ -3,7 +3,9 @@ Projects, roles and candidate retrieval (Step 7):
   POST /api/projects                         create a project
   GET  /api/projects                         list projects with their roles
   POST /api/projects/{id}/roles              add a role (position to fill) to a project
+  GET  /api/projects/{id}                    one project with its roles (Step 12b)
   GET  /api/roles/{id}                       one role with its requirements
+  PATCH /api/roles/{id}                      change a role's details or status (Step 12b)
   POST /api/roles/{id}/requirements/parse    LLM reads the description -> structured requirements
   PUT  /api/roles/{id}/requirements          a person corrects the requirements
   POST /api/roles/{id}/candidates            hybrid retrieval: skills + keyword + vector, fused with RRF
@@ -22,7 +24,7 @@ from app.matching.requirements import RoleParseError, ground_in_description, nor
 from app.matching.retrieval import retrieve_candidates
 from app.schemas.project import (
     AvailabilityOut, CandidateOut, CandidatesRequest, CandidatesResponse, ChunkEvidence, ProjectCreate,
-    ProjectOut, Requirements, RoleCreate, RoleOut, SkillMatchOut,
+    ProjectOut, Requirements, RoleCreate, RoleOut, RoleUpdate, SkillMatchOut,
 )
 
 router = APIRouter(tags=["projects & matching"])
@@ -58,6 +60,14 @@ async def list_projects(db: AsyncSession = Depends(get_db)):
     return (await db.scalars(select(Project).options(selectinload(Project.roles)).order_by(Project.id))).all()
 
 
+@router.get("/api/projects/{project_id}", response_model=ProjectOut)
+async def get_project(project_id: int, db: AsyncSession = Depends(get_db)):
+    project = await db.scalar(select(Project).where(Project.id == project_id).options(selectinload(Project.roles)))
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
 @router.post("/api/projects/{project_id}/roles", response_model=RoleOut, status_code=201)
 async def create_role(project_id: int, body: RoleCreate, db: AsyncSession = Depends(get_db)):
     if await db.get(Project, project_id) is None:
@@ -72,6 +82,18 @@ async def create_role(project_id: int, body: RoleCreate, db: AsyncSession = Depe
 @router.get("/api/roles/{role_id}", response_model=RoleOut)
 async def get_role(role_id: int, db: AsyncSession = Depends(get_db)):
     return await _get_role(db, role_id)
+
+
+@router.patch("/api/roles/{role_id}", response_model=RoleOut)
+async def update_role(role_id: int, body: RoleUpdate, db: AsyncSession = Depends(get_db)):
+    role = await _get_role(db, role_id)
+    for field, value in body.model_dump(exclude_unset=True).items():
+        if field in {"title", "description", "allocation_percent", "headcount", "status"} and value is None:
+            continue                                   # required columns: "null" means "leave as is"
+        setattr(role, field, value)
+    await db.commit()
+    await db.refresh(role)
+    return role
 
 
 # --------------------------------------------------------------------------- requirements

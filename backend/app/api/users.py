@@ -4,6 +4,7 @@ User management, admins only (Step 9):
   POST  /api/users          create a user (admin or resource manager)
   PATCH /api/users/{id}     rename, change role, (de)activate, reset password
 Users are never deleted: deactivating keeps the history ("who ran this match?") intact.
+Safeguards: the last active admin can't be demoted or deactivated, and no admin can do that to themselves.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
@@ -39,10 +40,16 @@ async def create_user(body: UserCreate, db: AsyncSession = Depends(get_db)):
 
 
 @router.patch("/{user_id}", response_model=UserOut)
-async def update_user(user_id: int, body: UserUpdate, db: AsyncSession = Depends(get_db)):
+async def update_user(user_id: int, body: UserUpdate, db: AsyncSession = Depends(get_db),
+                      current: User = Depends(require_admin)):
     user = await db.get(User, user_id)
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    # Step 12c: an admin can't lock THEMSELVES out by accident (the rule below only protects the
+    # last admin). Another admin can still change your role or deactivate you.
+    if user.id == current.id and (body.is_active is False or (body.role is not None and body.role != UserRole.ADMIN)):
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "You can't deactivate yourself or remove your own admin role. Ask another admin.")
     losing_admin = user.role == UserRole.ADMIN and (
         (body.role is not None and body.role != UserRole.ADMIN) or body.is_active is False)
     if losing_admin:

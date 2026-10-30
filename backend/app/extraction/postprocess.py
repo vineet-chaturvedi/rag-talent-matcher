@@ -145,6 +145,40 @@ def ground_job_skills(skills: list[str], block_text: str) -> tuple[list[str], li
 
 
 # --------------------------------------------------------------------------- main function
+_YEAR = re.compile(r"\b(19[5-9]\d|20\d\d)\b")
+
+
+def ground_education(entries: list[dict], resume_text: str) -> list[dict]:
+    """
+    Keep an education entry's year only if the RESUME shows it (Step 12 finding).
+
+    The 3B model often wrote chatter instead of a year: "goes with the date 2014", "context.year",
+    "goes here". 12 of 14 stored years were like that, while the resumes say "..., Pune University, 2017".
+    So the year is taken from the resume line that names the institution (or the line after it, when a
+    PDF wrapped the line); the model's own text is only used when its 4-digit year appears there too.
+    Idempotent, so it is also applied when an old profile is read (see GET /api/resumes/{id}/profile).
+    """
+    lines = [line.strip() for line in resume_text.splitlines()]
+    grounded = []
+    for entry in entries:
+        entry = dict(entry)
+        institution = (entry.get("institution") or "").strip().lower()
+        nearby = ""
+        if institution:
+            for i, line in enumerate(lines):
+                if institution in line.lower():
+                    nearby = " ".join(lines[i:i + 2])
+                    break
+        found = _YEAR.findall(nearby)
+        claimed = _YEAR.findall(str(entry.get("year") or ""))
+        if claimed and claimed[-1] in found:
+            entry["year"] = claimed[-1]
+        else:
+            entry["year"] = found[-1] if found else None
+        grounded.append(entry)
+    return grounded
+
+
 def build_profile(llm: ResumeExtraction, resume_text: str, today: date | None = None) -> Profile:
     today = today or date.today()
     text_norm = _norm(resume_text)
@@ -251,7 +285,7 @@ def build_profile(llm: ResumeExtraction, resume_text: str, today: date | None = 
     return Profile(
         headline=llm.headline, summary=llm.summary, total_experience_years=total_years,
         jobs=jobs, skills=skills,
-        education=[e.model_dump() for e in llm.education if e.degree or e.institution],
+        education=ground_education([e.model_dump() for e in llm.education if e.degree or e.institution], resume_text),
         certifications=[c for c in llm.certifications if c.strip()],
         rejected_skills=rejected, warnings=warnings,
     )
