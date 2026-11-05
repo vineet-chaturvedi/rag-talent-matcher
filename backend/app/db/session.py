@@ -42,9 +42,27 @@ def _apply_sqlite_pragmas(dbapi_connection, _connection_record) -> None:
 SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
+# Columns added to EXISTING tables after they were first created. create_all() only creates missing tables,
+# so these are added with ALTER TABLE when absent. A stop-gap until real migrations (Alembic, Step 15).
+ADDED_COLUMNS: list[tuple[str, str, str]] = [
+    ("resume_skills", "uses", "INTEGER DEFAULT 0"),      # doc 18 extraction fix
+    ("resume_skills", "source", "VARCHAR(20)"),
+]
+
+
+def _add_missing_columns(sync_conn) -> None:
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(sync_conn)
+    for table, column, ddl in ADDED_COLUMNS:
+        if table in inspector.get_table_names() and column not in {c["name"] for c in inspector.get_columns(table)}:
+            sync_conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
+
+
 async def init_db() -> None:
-    """Create any tables that don't exist yet. Does NOT alter existing tables (see migrations, Step 15)."""
+    """Create any tables that don't exist yet, and add the few columns listed in ADDED_COLUMNS."""
     import app.db.models  # noqa: F401  (registers all models on Base.metadata)
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_add_missing_columns)

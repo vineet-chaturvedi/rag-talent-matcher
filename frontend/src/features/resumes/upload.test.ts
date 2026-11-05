@@ -8,21 +8,23 @@ describe("employeeCodeFromFilename (same rule as the backend)", () => {
     ["emp-1002 rohan.docx", "EMP-1002"],
     ["EMP-1003.pdf", "EMP-1003"],
     ["_nothing.pdf", null],
+    ["Rajendra - Full Stack.pdf", null], // no code: the backend matches the employee's name instead
   ])("%s -> %s", (name, code) => {
     expect(employeeCodeFromFilename(name)).toBe(code);
   });
 });
 
 describe("precheckFile", () => {
-  it("accepts PDF and DOCX up to 10 MB", () => {
+  it("accepts PDF, DOCX and DOC up to 25 MB", () => {
     expect(precheckFile({ name: "a.PDF", size: 1000 })).toBeNull();
     expect(precheckFile({ name: "a.docx", size: MAX_FILE_BYTES })).toBeNull();
+    expect(precheckFile({ name: "old.doc", size: 1000 })).toBeNull();
   });
 
   it("explains what is wrong", () => {
-    expect(precheckFile({ name: "notes.txt", size: 10 })).toMatch(/PDF and DOCX/);
+    expect(precheckFile({ name: "notes.txt", size: 10 })).toMatch(/PDF, DOCX and DOC/);
     expect(precheckFile({ name: "a.pdf", size: 0 })).toMatch(/empty/);
-    expect(precheckFile({ name: "a.pdf", size: MAX_FILE_BYTES + 1 })).toMatch(/10 MB/);
+    expect(precheckFile({ name: "a.pdf", size: MAX_FILE_BYTES + 1 })).toMatch(/25 MB/);
   });
 });
 

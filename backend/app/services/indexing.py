@@ -15,7 +15,7 @@ from app.db.enums import ResumeStatus
 from app.db.models import Resume, ResumeChunk, ResumeSkill
 from app.db.session import SessionLocal
 from app.llm.ollama_client import OllamaClient
-from app.rag.chunking import JobInfo, build_chunks
+from app.rag.chunking import JobInfo, ProjectInfo, build_chunks
 from app.rag.embeddings import embed_documents
 from app.rag.keyword_index import replace_resume_rows
 from app.rag.vector_store import get_vector_store
@@ -34,12 +34,17 @@ async def index_resume(resume_id: int, ollama: OllamaClient, settings: Settings)
                 selectinload(Resume.profile),
                 selectinload(Resume.experiences),
                 selectinload(Resume.skills).selectinload(ResumeSkill.skill),
+                selectinload(Resume.projects),
             ],
         )
         if resume is None:
             return False
         profile = resume.profile
-        skills = sorted(((l.skill.name, l.years) for l in resume.skills), key=lambda s: -(s[1] or 0))
+        skills = sorted(((l.skill.name, l.years, l.uses or 0) for l in resume.skills),
+                        key=lambda s: (-(s[1] or 0), -s[2]))
+        projects = [ProjectInfo(p.name, p.role, p.duration_text, p.technologies or [], p.company)
+                    for p in resume.projects]
+        experience_basis = ((profile.raw_extraction or {}).get("experience_basis") if profile else None)
         jobs = [
             JobInfo(e.title, e.company, e.start_date, e.end_date, e.is_current, e.description)
             for e in sorted(resume.experiences, key=lambda e: e.start_date or date.min, reverse=True)
@@ -53,7 +58,7 @@ async def index_resume(resume_id: int, ollama: OllamaClient, settings: Settings)
         headline=profile.headline if profile else None,
         total_years=profile.total_experience_years if profile else None,
         summary=profile.summary if profile else None,
-        skills=skills, jobs=jobs,
+        skills=skills, jobs=jobs, projects=projects, experience_basis=experience_basis,
         max_chars=settings.chunk_max_chars, overlap=settings.chunk_overlap_chars,
         anonymize_text=settings.anonymize_chunks,
     )

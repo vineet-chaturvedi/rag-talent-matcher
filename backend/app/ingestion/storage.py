@@ -10,11 +10,13 @@ from pathlib import Path
 
 PDF_MIME = "application/pdf"
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+DOC_MIME = "application/msword"
 
 # extension -> (MIME type we store, the "magic bytes" every real file of that type starts with)
 ALLOWED_TYPES: dict[str, tuple[str, bytes]] = {
     ".pdf": (PDF_MIME, b"%PDF-"),
     ".docx": (DOCX_MIME, b"PK\x03\x04"),  # a .docx is a ZIP archive; ZIPs start with "PK"
+    ".doc": (DOC_MIME, b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"),  # Word 97-2003: an OLE compound file
 }
 
 
@@ -24,7 +26,7 @@ class InvalidFileError(ValueError):
 
 @dataclass(frozen=True)
 class ValidatedFile:
-    extension: str   # ".pdf" or ".docx"
+    extension: str   # ".pdf", ".docx" or ".doc"
     mime_type: str
     sha256: str      # 64 hex characters: the file's fingerprint
     size_bytes: int
@@ -34,10 +36,8 @@ def validate_resume_file(filename: str, data: bytes, max_bytes: int) -> Validate
     """Raise InvalidFileError if the file is not a usable resume; otherwise describe it."""
     extension = Path(filename or "").suffix.lower()
 
-    if extension == ".doc":
-        raise InvalidFileError("Old Word .doc files are not supported. Save it as .docx or PDF and upload again.")
     if extension not in ALLOWED_TYPES:
-        raise InvalidFileError(f"Unsupported file type '{extension or '(none)'}'. Upload a PDF or DOCX file.")
+        raise InvalidFileError(f"Unsupported file type '{extension or '(none)'}'. Upload a PDF, DOCX or DOC file.")
     if not data:
         raise InvalidFileError("The file is empty.")
     if len(data) > max_bytes:

@@ -50,6 +50,9 @@ class Resume(TimestampMixin, Base):
         back_populates="resume", cascade="all, delete-orphan", order_by="Experience.start_date.desc()"
     )
     skills: Mapped[list["ResumeSkill"]] = relationship(back_populates="resume", cascade="all, delete-orphan")
+    projects: Mapped[list["ResumeProject"]] = relationship(
+        back_populates="resume", cascade="all, delete-orphan", order_by="ResumeProject.position"
+    )
     chunks: Mapped[list["ResumeChunk"]] = relationship(
         back_populates="resume", cascade="all, delete-orphan", order_by="ResumeChunk.chunk_index"
     )
@@ -86,6 +89,30 @@ class Experience(Base):
     description: Mapped[str | None] = mapped_column(Text)
 
     resume: Mapped["Resume"] = relationship(back_populates="experiences")
+
+
+class ResumeProject(Base):
+    """
+    One project, product or client engagement described in a resume (doc 18: in 8 of 9 real resumes the
+    projects are the main content, and they are undated). Technologies are checked against the project's
+    own text; `company` is the job it was written under, if any.
+    """
+    __tablename__ = "resume_projects"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    resume_id: Mapped[int] = mapped_column(ForeignKey("resumes.id", ondelete="CASCADE"), index=True)
+    position: Mapped[int] = mapped_column(default=0)              # order in the resume
+    name: Mapped[str] = mapped_column(String(200))
+    role: Mapped[str | None] = mapped_column(String(200))
+    duration_months: Mapped[int | None]
+    duration_text: Mapped[str | None] = mapped_column(String(100))
+    technologies: Mapped[list | None] = mapped_column(JSON)        # canonical skill names
+    description: Mapped[str | None] = mapped_column(Text)
+    link: Mapped[str | None] = mapped_column(String(500))
+    company: Mapped[str | None] = mapped_column(String(200))       # the job's company, when known
+    company_basis: Mapped[str | None] = mapped_column(String(30))  # "inside job" / "only employer"
+
+    resume: Mapped["Resume"] = relationship(back_populates="projects")
 
 
 class ResumeChunk(Base):

@@ -33,7 +33,7 @@ class Settings(BaseSettings):
 
     # ---- Uploads & ingestion (Step 4) ----
     upload_dir: str = "./data/uploads"
-    max_upload_mb: int = 10              # per file
+    max_upload_mb: int = 25              # per file (Word files with embedded fonts reach 12+ MB, doc 18)
     max_files_per_batch: int = 200       # per bulk-upload request
     worker_enabled: bool = True          # background processing on/off
     worker_poll_seconds: float = 5.0     # how often an idle worker re-checks the queue
@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     # ---- Structured extraction (Step 5) ----
     extraction_model_role: Literal["fast", "quality"] = "quality"  # which of the two LLMs reads resumes
     extraction_max_output_tokens: int = 2048   # hard cap on the JSON answer length
-    extraction_max_input_chars: int = 16000    # ~4,000 tokens; longer resumes are truncated (with a warning)
+    extraction_max_input_chars: int = 16000    # ~4,000 tokens per model call; longer resumes are read in parts
 
     # ---- Chunking, embeddings & vector store (Step 6) ----
     chroma_dir: str = "./data/chroma"               # ChromaDB's files (git-ignored, rebuildable)

@@ -11,3 +11,8 @@ backend/data/
 frontend/node_modules/
 frontend/.next/
 frontend/.env.local
+# ---- Real resumes for the extraction test set (personal data, doc 18) ----
+samples/real/
+
+# ---- Files moved aside instead of deleted ----
+_to_delete/

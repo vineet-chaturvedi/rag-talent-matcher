@@ -3,15 +3,21 @@
  * No React and no network here, so they are unit tested (upload.test.ts).
  */
 
-export const MAX_FILE_BYTES = 10 * 1024 * 1024; // must match the backend's MAX_UPLOAD_MB (10)
-export const ACCEPTED_EXTENSIONS = [".pdf", ".docx"] as const;
+export const MAX_FILE_MB = 25; // must match the backend's MAX_UPLOAD_MB (Word files with embedded fonts reach 12+ MB)
+export const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
+export const ACCEPTED_EXTENSIONS = [".pdf", ".docx", ".doc"] as const;
 export const ACCEPT_ATTRIBUTE =
-  ".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  ".pdf,.docx,.doc,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword";
 
-/** "EMP-1001_ananya_iyer.pdf" -> "EMP-1001", like the backend: everything before the first "_", space or ".". */
+/**
+ * "EMP-1001_ananya_iyer.pdf" -> "EMP-1001", like the backend: everything before the first "_", space or ".".
+ * Only a code with a digit counts: "Rajendra - Full Stack.pdf" has no code (the backend then matches the
+ * employee's name instead).
+ */
 export function employeeCodeFromFilename(filename: string): string | null {
   const match = /^([^_\s.]+)/.exec(filename);
-  return match?.[1] ? match[1].toUpperCase() : null;
+  const code = match?.[1]?.toUpperCase();
+  return code && /\d/.test(code) ? code : null;
 }
 
 /**
@@ -20,9 +26,9 @@ export function employeeCodeFromFilename(filename: string): string | null {
  */
 export function precheckFile(file: { name: string; size: number }): string | null {
   const name = file.name.toLowerCase();
-  if (!ACCEPTED_EXTENSIONS.some((ext) => name.endsWith(ext))) return "Only PDF and DOCX files are accepted.";
+  if (!ACCEPTED_EXTENSIONS.some((ext) => name.endsWith(ext))) return "Only PDF, DOCX and DOC files are accepted.";
   if (file.size === 0) return "The file is empty.";
-  if (file.size > MAX_FILE_BYTES) return "Larger than 10 MB.";
+  if (file.size > MAX_FILE_BYTES) return `Larger than ${MAX_FILE_MB} MB.`;
   return null;
 }
 

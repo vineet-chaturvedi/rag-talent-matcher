@@ -148,7 +148,7 @@ async def get_employee_profile(ctx: ToolContext, a: EmployeeArgs) -> dict:
     resume = await ctx.session.scalar(
         select(Resume).where(Resume.employee_id == emp.id, Resume.is_current.is_(True),
                              Resume.status == ResumeStatus.READY)
-        .options(selectinload(Resume.profile), selectinload(Resume.experiences),
+        .options(selectinload(Resume.profile), selectinload(Resume.experiences), selectinload(Resume.projects),
                  selectinload(Resume.skills).selectinload(ResumeSkill.skill)))
     out = {"employee_code": emp.employee_code, "name": emp.full_name, "designation": emp.designation,
            "department": emp.department, "location": emp.location,
@@ -157,10 +157,23 @@ async def get_employee_profile(ctx: ToolContext, a: EmployeeArgs) -> dict:
            "current_project": emp.current_project_name}
     if resume is None or resume.profile is None:
         return {**out, "profile": "No processed resume yet."}
-    skills = sorted(resume.skills, key=lambda s: -(s.years or 0))[:15]
+    skills = sorted(resume.skills, key=lambda s: (-(s.years or 0), -(s.uses or 0)))[:20]
+
+    def skill_text(s) -> str:
+        if s.years:
+            return f"{s.skill.name} ({s.years} y, last used {s.last_used_year})"
+        if s.uses:
+            return f"{s.skill.name} (used in {s.uses} project{'s' if s.uses > 1 else ''})"
+        return f"{s.skill.name} (listed)"
+
+    basis = (resume.profile.raw_extraction or {}).get("experience_basis")
     out.update(
         headline=resume.profile.headline, total_years=resume.profile.total_experience_years,
-        skills=[f"{s.skill.name}" + (f" ({s.years} y, last used {s.last_used_year})" if s.years else "") for s in skills],
+        total_years_basis=basis,              # "stated in resume" when the resume has no dated jobs
+        skills=[skill_text(s) for s in skills],
+        projects=[f"{p.name}" + (f" as {p.role}" if p.role else "") + (f" ({p.duration_text})" if p.duration_text else "")
+                  + (f": {', '.join((p.technologies or [])[:8])}" if p.technologies else "")
+                  for p in resume.projects[:8]],
         jobs=[f"{j.title} at {j.company} ({j.start_date.year if j.start_date else '?'}-"
               f"{'present' if j.is_current else (j.end_date.year if j.end_date else '?')})"
               for j in sorted(resume.experiences, key=lambda j: j.start_date or date.min, reverse=True)],

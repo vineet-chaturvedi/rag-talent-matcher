@@ -747,7 +747,7 @@ export interface components {
         Body_bulk_upload_api_resumes_bulk_post: {
             /**
              * Files
-             * @description Many PDF/DOCX files named like EMP-1001_anything.pdf
+             * @description Many PDF/DOCX/DOC files, named like EMP-1001_anything.pdf or starting with the employee's name
              */
             files: string[];
         };
@@ -763,7 +763,7 @@ export interface components {
         Body_upload_resume_api_employees__employee_id__resumes_post: {
             /**
              * File
-             * @description PDF or DOCX
+             * @description PDF, DOCX or DOC
              */
             file: string;
         };
@@ -1415,10 +1415,19 @@ export interface components {
             summary: string | null;
             /** Total Experience Years */
             total_experience_years: number | null;
+            /** Experience Basis */
+            experience_basis?: string | null;
+            /** Stated Years */
+            stated_years?: number | null;
             /** Skills */
             skills: components["schemas"]["ProfileSkillOut"][];
             /** Experience */
             experience: components["schemas"]["ProfileJobOut"][];
+            /**
+             * Projects
+             * @default []
+             */
+            projects: components["schemas"]["ProfileProjectOut"][];
             /** Education */
             education: components["schemas"]["EducationOut"][];
             /** Certifications */
@@ -1434,6 +1443,27 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /** ProfileProjectOut */
+        ProfileProjectOut: {
+            /** Name */
+            name: string;
+            /** Role */
+            role: string | null;
+            /** Duration Months */
+            duration_months: number | null;
+            /** Duration Text */
+            duration_text: string | null;
+            /** Technologies */
+            technologies: string[];
+            /** Description */
+            description: string | null;
+            /** Link */
+            link: string | null;
+            /** Company */
+            company: string | null;
+            /** Company Basis */
+            company_basis: string | null;
+        };
         /** ProfileSkillOut */
         ProfileSkillOut: {
             /** Name */
@@ -1446,6 +1476,13 @@ export interface components {
             last_used_year: number | null;
             /** Evidence */
             evidence: string | null;
+            /**
+             * Uses
+             * @default 0
+             */
+            uses: number;
+            /** Source */
+            source?: string | null;
         };
         /** ProjectCounts */
         ProjectCounts: {

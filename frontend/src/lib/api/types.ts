@@ -32,6 +32,7 @@ export type BulkUploadResult = Schemas["BulkUploadResult"];
 export type Profile = Schemas["ProfileOut"];
 export type ProfileSkill = Schemas["ProfileSkillOut"];
 export type ProfileJob = Schemas["ProfileJobOut"];
+export type ProfileProject = Schemas["ProfileProjectOut"];
 
 export type RoleStatus = Schemas["RoleStatus"];
 export type Requirements = Schemas["Requirements"];

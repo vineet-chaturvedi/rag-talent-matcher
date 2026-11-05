@@ -1,0 +1,1108 @@
+{
+  "about": "Test set for resume extraction: the 9 real resumes described in doc 18. The files themselves are personal data and live in samples/real/ (not in git). 'llm' is a correct model answer, used by --offline to test the code alone. 'expect' is checked for both the offline and the real-model run. Ranges are [min, max].",
+  "resumes": [
+    {
+      "id": "R1",
+      "file": "R1_ajay_chandani.pdf",
+      "llm": {
+        "headline": "Web Developer | Lead Ecommerce & AI Solutions Engineer",
+        "summary": "Senior Software Engineer and Solutions Architect with 13+ years of experience in enterprise web applications, eCommerce platforms and AI automation. Specialises in PHP, Laravel, WordPress, WooCommerce, Shopify and BigCommerce, with Python, Django, FastAPI and production AI work.",
+        "experience": [
+          {
+            "title": "Senior Software Engineer & Technical Lead",
+            "company": "Encoresky Technologies Pvt. Ltd.",
+            "start": "April 2018",
+            "end": "Present",
+            "description": "Leads eCommerce, web platform and AI automation projects for international clients."
+          },
+          {
+            "title": "Software Engineer / Web Developer",
+            "company": "Cyber Infrastructure Private Limited (CIS)",
+            "start": "March 2013",
+            "end": "Aprl 2018",
+            "description": "Built 50+ websites and eCommerce portals with PHP, WordPress and WooCommerce."
+          }
+        ],
+        "projects": [
+          {
+            "name": "Patrishi Sports",
+            "role": "Project Manager & Tech Lead",
+            "duration": "6 Months",
+            "technologies": [
+              "Laravel",
+              "React.js",
+              "MySQL",
+              "REST API",
+              "Dymo Hardware SDK"
+            ],
+            "description": "An athletic event platform with registration, payments and rankings."
+          },
+          {
+            "name": "WSMode",
+            "role": "Project Manager & Tech Lead",
+            "duration": "6 Months",
+            "technologies": [
+              "Laravel",
+              "WordPress",
+              "WooCommerce",
+              "Bitvavo & Coinbase APIs",
+              "Apple Pay"
+            ],
+            "description": "An automated trading platform with memberships and trading bots."
+          },
+          {
+            "name": "PeaceAtHome Parenting Solutions",
+            "role": "Lead Developers",
+            "duration": "4 Months",
+            "technologies": [
+              "Laravel",
+              "WordPress",
+              "WooCommerce",
+              "Bitvavo & Coinbase APIs",
+              "Apple Pay"
+            ],
+            "description": "A parenting education portal with courses, subscriptions and Zoom classes."
+          },
+          {
+            "name": "AudioAdvisor",
+            "role": "Lead Developer",
+            "duration": "2 Months",
+            "technologies": [
+              "BigCommerce",
+              "Stencil Framework",
+              "JavaScript",
+              "Headless APIs"
+            ],
+            "description": "A customised audio eCommerce store."
+          },
+          {
+            "name": "Kindtokidz",
+            "role": "Lead Developer",
+            "duration": "4 Months",
+            "technologies": [
+              "BigCommerce",
+              "Stencil CLI",
+              "Handlebars.js",
+              "Payment Gateways"
+            ],
+            "description": "Custom Stencil storefront themes for a toy shop."
+          },
+          {
+            "name": "ConnectingDNA",
+            "role": "Lead Developer",
+            "duration": "2 Months",
+            "technologies": [
+              "WordPress",
+              "PHP",
+              "Custom Plugin Architecture"
+            ],
+            "description": "A WordPress plugin for DNA profiles."
+          }
+        ],
+        "education": [
+          {
+            "degree": "Master of Computer Applications (MCA)",
+            "institution": "School of Computer & Electronics, IPS Academy, Indore | Rajiv Gandhi Proudyogiki Vishwavidyalaya (R.G.P.V)",
+            "year": "2010-2013"
+          },
+          {
+            "degree": "Bachelor of Computer Applications (BCA)",
+            "institution": "Vikram University, Ujjain (M.P.)",
+            "year": "2007-2010"
+          }
+        ],
+        "certifications": []
+      },
+      "expect": {
+        "experience_basis": "dated jobs",
+        "total_years": [
+          13.5,
+          13.9
+        ],
+        "jobs": 2,
+        "projects": 6,
+        "skills_present": [
+          "PHP",
+          "Laravel",
+          "WordPress",
+          "WooCommerce",
+          "Shopify",
+          "BigCommerce",
+          "Magento",
+          "Python",
+          "Django",
+          "FastAPI",
+          "MySQL",
+          "PostgreSQL",
+          "GraphQL",
+          "REST APIs",
+          "JavaScript",
+          "React",
+          "Handlebars.js",
+          "Tailwind CSS",
+          "Git",
+          "RAG",
+          "n8n",
+          "Voiceflow",
+          "AI chatbots",
+          "OpenAI API",
+          "Stripe",
+          "PayPal",
+          "Authorize.Net",
+          "Zoom API",
+          "Dymo SDK",
+          "Stencil",
+          "Voice assistants",
+          "Claude API",
+          "Liquid",
+          "Webhooks"
+        ],
+        "skills_absent": [
+          "Ecommerce & CMS",
+          "Backend & Full-Stack",
+          "AI & Automation",
+          "Frontend",
+          "Tools",
+          "Leadership",
+          "RAG pipelines",
+          "Assistants",
+          "Voice",
+          "Project Ownership",
+          "Bitvavo & Coinbase APIs",
+          "Custom Plugin Architecture"
+        ],
+        "skill_years": {
+          "PHP": [
+            13.5,
+            13.9
+          ],
+          "WordPress": [
+            13.5,
+            13.9
+          ],
+          "WooCommerce": [
+            13.5,
+            13.9
+          ],
+          "Laravel": [
+            8.4,
+            8.8
+          ],
+          "RAG": [
+            6.5,
+            7.0
+          ],
+          "n8n": [
+            7.5,
+            8.0
+          ]
+        },
+        "project_roles": {
+          "Patrishi Sports": "Project Manager & Tech Lead",
+          "Kindtokidz": "Lead Developer"
+        },
+        "project_months": {
+          "Patrishi Sports": 6,
+          "AudioAdvisor": 2
+        },
+        "project_tech": {
+          "Patrishi Sports": [
+            "Laravel",
+            "React",
+            "MySQL"
+          ],
+          "WSMode": [
+            "Laravel",
+            "WooCommerce",
+            "Apple Pay"
+          ]
+        },
+        "education_years": [
+          "2013",
+          "2010"
+        ],
+        "max_unknown_skills": 3
+      }
+    },
+    {
+      "id": "R2",
+      "file": "R2_harsh_python.docx",
+      "llm": {
+        "headline": "Python - Developer",
+        "summary": "Full Stack Engineer with 8+ years of experience building scalable web applications with Python and Django. Builds secure REST APIs and cloud-native applications on AWS with CI/CD.",
+        "experience": [
+          {
+            "title": null,
+            "company": "Encoresky Technologies Pvt Ltd",
+            "start": "08 Feb, 2018",
+            "end": "Present",
+            "description": null
+          }
+        ],
+        "projects": [
+          {
+            "name": "AmigoAI",
+            "role": "Full Stack Engineer",
+            "duration": null,
+            "technologies": [
+              "Python",
+              "FastAPI",
+              "OpenAI",
+              "VectorDatabase(Quadrant)",
+              "Postgres",
+              "CI/CD",
+              "AWS",
+              "Selenium"
+            ],
+            "description": "A conversational e-commerce assistant using GPT-4 and semantic search."
+          },
+          {
+            "name": "Datumsurge",
+            "role": "FullStack Engineer",
+            "duration": null,
+            "technologies": [
+              "Python",
+              "AWS",
+              "Lambda Functions",
+              "DynamoDB",
+              "S3 Bucket",
+              "API Gateways"
+            ],
+            "description": "A US government platform for practitioners and patients on FHIR."
+          },
+          {
+            "name": "DCLS",
+            "role": "Software Developer",
+            "duration": null,
+            "technologies": [
+              "Python",
+              "CUDA",
+              "Flask",
+              "CI/CD Pipelines",
+              "REST API",
+              "Automation/Cronjobs",
+              "PostgreSQL",
+              "Redis Queue",
+              "Docker",
+              "AWS",
+              "NLTK",
+              "Spacy",
+              "Tensorflow",
+              "Huggingface",
+              "Bash Scripting",
+              "SQLAlchemy",
+              "Bitbucket",
+              "JIRA"
+            ],
+            "description": "An NLP service for named entity recognition, sentiment analysis and text classification."
+          },
+          {
+            "name": "AnimalHealth Research",
+            "role": "AWS Data & AI Engineer",
+            "duration": null,
+            "technologies": [
+              "Python",
+              "AWS Lambda",
+              "S3",
+              "EventBridge",
+              "SQS",
+              "API Gateway",
+              "DynamoDB",
+              "ElasticCache",
+              "OpenSearch (AOSS)",
+              "LangChain",
+              "FastEmbed",
+              "GPT-based LLM Integration",
+              "CloudWatch",
+              "CloudTrail"
+            ],
+            "description": "An event-driven data pipeline with RAG over OpenSearch."
+          }
+        ],
+        "education": [
+          {
+            "degree": "Masters of Computer Application",
+            "institution": "Maharaja Ranjit Singh College, Indore (RGPV)",
+            "year": "2020"
+          },
+          {
+            "degree": "Bachelor of Computer Application",
+            "institution": "Kothari College Of Management Science & Technology, Indore (DAVV)",
+            "year": "2018"
+          }
+        ],
+        "certifications": []
+      },
+      "expect": {
+        "experience_basis": "dated jobs",
+        "total_years": [
+          8.5,
+          8.9
+        ],
+        "jobs": 1,
+        "projects": 4,
+        "skills_present": [
+          "Python",
+          "Django",
+          "FastAPI",
+          "Flask",
+          "AWS",
+          "AWS Lambda",
+          "DynamoDB",
+          "Amazon S3",
+          "PostgreSQL",
+          "Redis",
+          "Docker",
+          "CI/CD",
+          "GitHub Actions",
+          "Jenkins",
+          "Selenium",
+          "OpenAI API",
+          "LangChain",
+          "FastEmbed",
+          "Qdrant",
+          "FAISS",
+          "RAG",
+          "spaCy",
+          "NLTK",
+          "TensorFlow",
+          "Hugging Face Transformers",
+          "CUDA",
+          "SQLAlchemy",
+          "Bash",
+          "FHIR",
+          "Amazon OpenSearch",
+          "Amazon ElastiCache"
+        ],
+        "skills_absent": [
+          "PHP"
+        ],
+        "skill_years": {
+          "Python": [
+            8.5,
+            8.9
+          ]
+        },
+        "project_roles": {
+          "DCLS": "Software Developer",
+          "AnimalHealth Research": "AWS Data & AI Engineer"
+        },
+        "project_tech": {
+          "AmigoAI": [
+            "Python",
+            "FastAPI",
+            "Qdrant",
+            "PostgreSQL"
+          ],
+          "DCLS": [
+            "Flask",
+            "spaCy",
+            "TensorFlow"
+          ]
+        },
+        "education_years": [
+          "2020",
+          "2018"
+        ],
+        "max_unknown_skills": 3
+      }
+    },
+    {
+      "id": "R3",
+      "file": "R3_ravi_fullstack.doc",
+      "llm": {
+        "headline": "Senior Full-stack Engineer (Agentic AI)",
+        "summary": "Senior Full Stack Engineer with 5+ years of experience building customer-facing applications and B2B SaaS platforms. Works with TypeScript, React, Next.js, Node.js and Python, and builds AI-powered features with embeddings and RAG.",
+        "experience": [],
+        "projects": [
+          {
+            "name": "ArorisHealth",
+            "role": null,
+            "duration": null,
+            "technologies": [
+              "Next.js",
+              "TypeScript",
+              "Node.js",
+              "AI/ML services for document parsing",
+              "Firebase"
+            ],
+            "description": "Payer-contract analytics for healthcare providers with AI document parsing."
+          },
+          {
+            "name": "YES (Your Employment Solutions)",
+            "role": null,
+            "duration": null,
+            "technologies": [
+              "ReactJS",
+              "NextJS",
+              "Node.js",
+              "AWS Lambda",
+              "Podio"
+            ],
+            "description": "A staffing platform automating job postings and candidate communication."
+          },
+          {
+            "name": "Warely",
+            "role": null,
+            "duration": null,
+            "technologies": [
+              "React",
+              "Next.js",
+              "TypeScript",
+              "Node.js",
+              "Firebase",
+              "AI/ML services"
+            ],
+            "description": "A digital ordering system."
+          },
+          {
+            "name": "PatrishiSports",
+            "role": null,
+            "duration": null,
+            "technologies": [
+              "Next.js",
+              "TypeScript",
+              "Node.js",
+              "WebSockets",
+              "AI/ML services for performance analysis"
+            ],
+            "description": "A platform for running events and athlete rankings."
+          },
+          {
+            "name": "Gabpals",
+            "role": null,
+            "duration": null,
+            "technologies": [
+              "ReactJS"
+            ],
+            "description": "A ReactJS admin panel."
+          }
+        ],
+        "education": [
+          {
+            "degree": "B. Tech",
+            "institution": "RGPV",
+            "year": "2015"
+          }
+        ],
+        "certifications": []
+      },
+      "expect": {
+        "experience_basis": "stated in resume",
+        "total_years": [
+          5.0,
+          5.0
+        ],
+        "jobs": 0,
+        "projects": 5,
+        "skills_present": [
+          "TypeScript",
+          "React",
+          "Next.js",
+          "Node.js",
+          "Python",
+          "GraphQL",
+          "MongoDB",
+          "PostgreSQL",
+          "Redis",
+          "Tailwind CSS",
+          "Material UI",
+          "styled-components",
+          "Redux",
+          "Formik",
+          "Yup",
+          "Axios",
+          "Firebase",
+          "AWS Lambda",
+          "DynamoDB",
+          "Podio",
+          "WebSockets",
+          "RAG",
+          "Embeddings",
+          "Vector Databases",
+          "GitHub",
+          "Jira"
+        ],
+        "skills_absent": [
+          "Languages & Frameworks",
+          "Backend & Architecture",
+          "Databases & Data Layer"
+        ],
+        "min_uses": {
+          "Node.js": 4,
+          "Next.js": 4,
+          "TypeScript": 3
+        },
+        "project_tech": {
+          "Warely": [
+            "Redux",
+            "Formik",
+            "Axios",
+            "Material UI"
+          ]
+        },
+        "education_years": [
+          "2015"
+        ],
+        "max_unknown_skills": 3
+      }
+    },
+    {
+      "id": "R4",
+      "file": "R4_mahesh_fullstack.pdf",
+      "llm": {
+        "headline": "Full Stack Developer",
+        "summary": "Full Stack Developer with over 6 years of experience building scalable web and mobile applications. Works with React, Node.js and PostgreSQL, microservices and CI/CD.",
+        "experience": [],
+        "projects": [
+          {
+            "name": "Davis Imperial",
+            "role": "Lead Developer",
+            "duration": null,
+            "technologies": [
+              "ReactJs",
+              "Node.js",
+              "Postgres"
+            ],
+            "description": "A laundry pickup and delivery app with an admin dashboard."
+          },
+          {
+            "name": "MyKids",
+            "role": "Lead Developer",
+            "duration": null,
+            "technologies": [
+              "ReactJS",
+              "NodeJS",
+              "MySQL"
+            ],
+            "description": "A portal for a children's modeling agency."
+          },
+          {
+            "name": "Finexity",
+            "role": "Full Stack Developer",
+            "duration": null,
+            "technologies": [
+              "ReactJS",
+              "NodeJS",
+              "Postgres",
+              "Auth0",
+              "CI/CD",
+              "Infrastructure Management"
+            ],
+            "description": "A digital wealth platform built with microservices."
+          },
+          {
+            "name": "SmartGas",
+            "role": "Full Stack Developer",
+            "duration": null,
+            "technologies": [
+              "Nodejs",
+              "MongoDB",
+              "Angular",
+              "Flutterwave payment Gateway",
+              "Seerbit payment Gateway",
+              "GRPC",
+              "Twillo"
+            ],
+            "description": "A gas cylinder ordering and delivery SaaS platform in Nigeria."
+          },
+          {
+            "name": "UncleFitter",
+            "role": "Lead Developer",
+            "duration": null,
+            "technologies": [
+              "NodeJS",
+              "Postgres"
+            ],
+            "description": "A car repair service booking app."
+          }
+        ],
+        "education": [
+          {
+            "degree": "Bachelor of Technology - Computer science",
+            "institution": null,
+            "year": null
+          }
+        ],
+        "certifications": []
+      },
+      "expect": {
+        "experience_basis": "stated in resume",
+        "total_years": [
+          6.0,
+          6.0
+        ],
+        "jobs": 0,
+        "projects": 5,
+        "skills_present": [
+          "React",
+          "Node.js",
+          "Express",
+          "PostgreSQL",
+          "MySQL",
+          "MongoDB",
+          "Angular",
+          "Next.js",
+          "Docker",
+          "Git",
+          "Auth0",
+          "gRPC",
+          "Twilio",
+          "Flutterwave",
+          "Seerbit",
+          "WebSockets",
+          "CI/CD",
+          "Stored procedures"
+        ],
+        "skills_absent": [],
+        "min_uses": {
+          "Node.js": 5,
+          "React": 3,
+          "PostgreSQL": 3
+        },
+        "project_roles": {
+          "Davis Imperial": "Lead Developer",
+          "MyKids": "Lead Developer",
+          "UncleFitter": "Lead Developer"
+        },
+        "project_tech": {
+          "SmartGas": [
+            "Node.js",
+            "MongoDB",
+            "Angular",
+            "gRPC",
+            "Twilio"
+          ]
+        },
+        "no_stated_years_from": "16 years old",
+        "education_years": [
+          null
+        ],
+        "max_unknown_skills": 3
+      }
+    },
+    {
+      "id": "R5",
+      "file": "R5_rajendra_fullstack.pdf",
+      "llm": {
+        "headline": "Full Stack Developer",
+        "summary": "Full Stack Developer with 6+ years of experience building scalable web applications with Node.js, Express and React. Experienced in microservices, AWS serverless and Docker.",
+        "experience": [],
+        "projects": [
+          {
+            "name": "ArorisHealth",
+            "role": "Full Stack Developer",
+            "duration": null,
+            "technologies": [],
+            "description": "Healthcare contract data management with AI contract parsing."
+          },
+          {
+            "name": "YES (Your Employment Solutions)",
+            "role": "Full Stack Developer",
+            "duration": null,
+            "technologies": [
+              "ReactJS",
+              "NextJS",
+              "Node.js",
+              "AWS Lambda",
+              "Podio"
+            ],
+            "description": "Serverless HR workflows and job application APIs."
+          },
+          {
+            "name": "Finexity",
+            "role": "Full Stack Developer",
+            "duration": null,
+            "technologies": [
+              "React.js",
+              "Node.js",
+              "GraphQL",
+              "Auth0"
+            ],
+            "description": "A digital wealth platform with blockchain tokenization."
+          },
+          {
+            "name": "GolfDaddy",
+            "role": "Full Stack Developer",
+            "duration": null,
+            "technologies": [
+              "ReactJS",
+              "NodeJS",
+              "MongoDB",
+              "Lambda"
+            ],
+            "description": "A golf course booking marketplace."
+          },
+          {
+            "name": "HRMS",
+            "role": "Frontend Developer",
+            "duration": null,
+            "technologies": [
+              "ReactJS",
+              "NodeJS",
+              "MongoDB"
+            ],
+            "description": "A human resource management system."
+          },
+          {
+            "name": "QuickCart",
+            "role": "Full Stack Developer",
+            "duration": null,
+            "technologies": [
+              "ReactJS",
+              "NodeJS",
+              "Express",
+              "MongoDB",
+              "REST APIs"
+            ],
+            "description": "A lightweight online ordering system."
+          }
+        ],
+        "education": [
+          {
+            "degree": "Bachelor of Technology (B.Tech.) – Computer Science",
+            "institution": null,
+            "year": null
+          }
+        ],
+        "certifications": []
+      },
+      "expect": {
+        "experience_basis": "stated in resume",
+        "total_years": [
+          6.0,
+          6.0
+        ],
+        "jobs": 0,
+        "projects": 6,
+        "skills_present": [
+          "Node.js",
+          "Express",
+          "React",
+          "Next.js",
+          "TypeScript",
+          "PostgreSQL",
+          "MySQL",
+          "MongoDB",
+          "GraphQL",
+          "Auth0",
+          "AWS Lambda",
+          "Amazon S3",
+          "DynamoDB",
+          "Firebase",
+          "Podio",
+          "Postman",
+          "Swagger",
+          "Docker",
+          "Git",
+          "Scrum"
+        ],
+        "skills_absent": [
+          "Camunda",
+          "Backend Engineering",
+          "Frontend Engineering",
+          "API Tools"
+        ],
+        "min_uses": {
+          "React": 5,
+          "Node.js": 5,
+          "MongoDB": 3
+        },
+        "project_roles": {
+          "HRMS": "Frontend Developer"
+        },
+        "education_years": [
+          null
+        ],
+        "max_unknown_skills": 3
+      }
+    },
+    {
+      "id": "R6",
+      "file": "R6_ravi_react_native.pdf",
+      "llm": {
+        "headline": "React Native Developer",
+        "summary": "React Native Developer with 5+ years of experience in mobile application development. Covers the full software development lifecycle from requirement analysis to implementation.",
+        "experience": [],
+        "projects": [
+          {
+            "name": "Smart Energies",
+            "role": "Mobile App Developer",
+            "duration": null,
+            "technologies": [
+              "React-Native"
+            ],
+            "description": "A gas delivery app with maps, live tracking, OTP and payments."
+          },
+          {
+            "name": "Shared Meter Agent",
+            "role": null,
+            "duration": null,
+            "technologies": [
+              "React Native"
+            ],
+            "description": "A Bluetooth app for shared gas meter management."
+          },
+          {
+            "name": "AllBetter",
+            "role": "Mobile App Developer",
+            "duration": null,
+            "technologies": [
+              "React-Native"
+            ],
+            "description": "Customer and provider apps for service booking."
+          },
+          {
+            "name": "Freevice",
+            "role": null,
+            "duration": null,
+            "technologies": [
+              "React Native"
+            ],
+            "description": "A salon booking app for users and salon owners."
+          },
+          {
+            "name": "Warely POS System",
+            "role": "Mobile App Developer",
+            "duration": null,
+            "technologies": [
+              "React Native"
+            ],
+            "description": "A tablet POS app with printers, scanners and offline mode."
+          }
+        ],
+        "education": [
+          {
+            "degree": "bachelor of engineering - CS",
+            "institution": null,
+            "year": null
+          }
+        ],
+        "certifications": []
+      },
+      "expect": {
+        "experience_basis": "stated in resume",
+        "total_years": [
+          5.0,
+          5.0
+        ],
+        "jobs": 0,
+        "projects": 5,
+        "skills_present": [
+          "React Native",
+          "JavaScript",
+          "Java",
+          "Kotlin",
+          "Android",
+          "iOS",
+          "Firebase",
+          "Google Maps API",
+          "REST APIs",
+          "Twilio",
+          "PayU",
+          "Firebase Cloud Messaging",
+          "SQLite",
+          "Room",
+          "Bluetooth",
+          "Git",
+          "MVVM"
+        ],
+        "skills_absent": [
+          "Mobile application development",
+          "Documentation",
+          "Implementation",
+          "Software design",
+          "Coding and debugging",
+          "Integrations of Rest APIs",
+          "JS in React Native",
+          "React Native development"
+        ],
+        "min_uses": {
+          "React Native": 5
+        },
+        "project_roles": {
+          "Smart Energies": "Mobile App Developer",
+          "Warely POS System": "Mobile App Developer"
+        },
+        "education_years": [
+          null
+        ],
+        "max_unknown_skills": 3
+      }
+    },
+    {
+      "id": "R7",
+      "file": "R7_vineet_fullstack.pdf",
+      "same_llm_as": "R5",
+      "expect": {
+        "experience_basis": "stated in resume",
+        "total_years": [
+          6.0,
+          6.0
+        ],
+        "jobs": 0,
+        "projects": 6,
+        "skills_present": [
+          "Node.js",
+          "React",
+          "MongoDB",
+          "GraphQL",
+          "AWS Lambda"
+        ],
+        "skills_absent": [
+          "Camunda"
+        ],
+        "max_unknown_skills": 3
+      }
+    },
+    {
+      "id": "R8",
+      "file": "R8_vineet_mern.pdf",
+      "same_llm_as": "R5",
+      "llm_overrides": {
+        "headline": "MERN Stack Developer"
+      },
+      "expect": {
+        "experience_basis": "stated in resume",
+        "total_years": [
+          6.0,
+          6.0
+        ],
+        "jobs": 0,
+        "projects": 6,
+        "skills_present": [
+          "Node.js",
+          "React",
+          "MongoDB",
+          "Express"
+        ],
+        "skills_absent": [
+          "Camunda"
+        ],
+        "max_unknown_skills": 3
+      }
+    },
+    {
+      "id": "R9",
+      "file": "R9_vishal_golang.pdf",
+      "llm": {
+        "headline": "Golang developer",
+        "summary": "Senior Full Stack Developer with 9+ years of experience building scalable applications with Golang and Node.js. Works with PostgreSQL, MySQL, MongoDB, AWS, GCP, Terraform, GraphQL and REST APIs.",
+        "experience": [],
+        "projects": [
+          {
+            "name": "Finexity",
+            "role": null,
+            "duration": null,
+            "technologies": [
+              "Golang",
+              "GCP",
+              "terraform",
+              "Twilio",
+              "Sentry",
+              "Dgraph",
+              "Mongodb (Atlas)",
+              "Firestore (Firebase)",
+              "Auth0",
+              "Geth"
+            ],
+            "description": "A fintech platform for investing in real assets through blockchain."
+          },
+          {
+            "name": "Datum-Surge",
+            "role": null,
+            "duration": null,
+            "technologies": [
+              "Golang",
+              "AWS"
+            ],
+            "description": "A US government platform for practitioners and patients."
+          },
+          {
+            "name": "Nexopay",
+            "role": "Full Stack Developer",
+            "duration": null,
+            "technologies": [
+              "Golang",
+              "Auth0",
+              "CI/CD",
+              "Infrastructure Management",
+              "ReactJS"
+            ],
+            "description": "A fintech payment platform."
+          },
+          {
+            "name": "Allbetter",
+            "role": "Full Stack Developer",
+            "duration": null,
+            "technologies": [],
+            "description": "Features for the Syfe digital wealth management platform."
+          }
+        ],
+        "education": [
+          {
+            "degree": "Bachelor's of Technologies in Computer Science",
+            "institution": null,
+            "year": null
+          }
+        ],
+        "certifications": []
+      },
+      "expect": {
+        "experience_basis": "stated in resume",
+        "total_years": [
+          9.0,
+          9.0
+        ],
+        "jobs": 0,
+        "projects": 4,
+        "skills_present": [
+          "Go",
+          "Node.js",
+          "Express",
+          "PostgreSQL",
+          "MySQL",
+          "MongoDB",
+          "Dgraph",
+          "Firestore",
+          "GraphQL",
+          "REST APIs",
+          "AWS",
+          "GCP",
+          "Terraform",
+          "Docker",
+          "Jenkins",
+          "CI/CD",
+          "Auth0",
+          "Twilio",
+          "Sentry",
+          "Geth",
+          "AWS Cognito",
+          "React",
+          "Git",
+          "GitHub",
+          "GitLab",
+          "Bitbucket",
+          "Jira",
+          "Airtable"
+        ],
+        "skills_absent": [
+          "Backend Tech stack",
+          "Databases",
+          "Cloud & DevOps",
+          "Version Control & Tools"
+        ],
+        "min_uses": {
+          "Go": 3
+        },
+        "project_roles": {
+          "Nexopay": "Full Stack Developer"
+        },
+        "education_years": [
+          null
+        ],
+        "max_unknown_skills": 3
+      }
+    }
+  ]
+}

@@ -103,15 +103,20 @@ def check_availability(emp: Employee, role: ProjectRole) -> Availability:
 
 
 # --------------------------------------------------------------------------- ① skills signal
-def _credit(direct: bool, years: float | None, last_used: int | None, needed_years: float) -> float:
+def _credit(direct: bool, years: float | None, last_used: int | None, needed_years: float, uses: int = 0) -> float:
     """
     How well one employee skill covers one requirement (0..1):
       base     1.0 for the exact skill, 0.6 for an implied one (EKS for Kubernetes)
-      years    0.4 + 0.6 * min(1, years / needed)   (unknown years -> 0.6)
+      years    0.4 + 0.6 * min(1, years / needed)
+               unknown years: by how many projects used it (doc 18: most real resumes have no dated jobs)
+               only listed 0.6 · 1 project 0.7 · 2 projects 0.8 · 3 or more 0.9
       recency  used this/last year 1.0 · within 3 years 0.8 · older 0.5 · unknown 0.8
     """
     base = 1.0 if direct else 0.6
-    years_factor = 0.6 if years is None else 0.4 + 0.6 * min(1.0, years / needed_years)
+    if years is None:
+        years_factor = 0.6 if not uses else min(0.9, 0.6 + 0.1 * uses)
+    else:
+        years_factor = 0.4 + 0.6 * min(1.0, years / needed_years)
     if last_used is None:
         recency = 0.8
     else:
@@ -130,7 +135,7 @@ def _best_match(required: str, min_years: float | None, links: list[ResumeSkill]
         direct = name.lower() == req                      # case-insensitive: "LLM evaluation" = "llm evaluation"
         if not direct and req not in {i.lower() for i in implied_by(name)}:
             continue
-        credit = _credit(direct, link.years, link.last_used_year, needed)
+        credit = _credit(direct, link.years, link.last_used_year, needed, link.uses or 0)
         if best is None or credit > best.credit:
             best = SkillMatch(required, name, direct, link.years, link.last_used_year, credit, link.evidence)
     return best

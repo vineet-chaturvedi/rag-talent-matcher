@@ -30,6 +30,10 @@ class ResumeSkill(Base):
     years: Mapped[float | None]            # e.g. 4.5
     last_used_year: Mapped[int | None]     # e.g. 2026; recent skills matter more than old ones
     evidence: Mapped[str | None] = mapped_column(Text)  # quote from the resume supporting this skill
+    # Doc 18: most real resumes have no dated jobs, so years are often unknown. How many jobs and projects
+    # USED the skill, and where the best evidence is, still say how strong it is.
+    uses: Mapped[int | None] = mapped_column(default=0)        # jobs + projects using it
+    source: Mapped[str | None] = mapped_column(String(20))     # job / project / skills list / mentioned
 
     resume: Mapped["Resume"] = relationship(back_populates="skills")
     skill: Mapped["Skill"] = relationship(back_populates="resume_links")

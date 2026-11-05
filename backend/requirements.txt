@@ -16,6 +16,7 @@ aiosqlite>=0.20
 # Resume text extraction
 pypdfium2>=4.30              # PDF text (Apache-2.0 / BSD licence)
 python-docx>=1.1             # Word .docx text, including tables
+olefile>=0.47                # legacy Word .doc files (reads the OLE container; pure Python, BSD licence)
 
 # Vector database (Step 6)
 chromadb>=1.0                # embedded vector store, saved to data/chroma

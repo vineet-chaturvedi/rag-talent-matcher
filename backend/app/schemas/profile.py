@@ -16,6 +16,20 @@ class ProfileSkillOut(BaseModel):
     years: float | None
     last_used_year: int | None
     evidence: str | None
+    uses: int = 0                       # jobs + projects that used it (doc 18)
+    source: str | None = None           # job / project / skills list / mentioned
+
+
+class ProfileProjectOut(BaseModel):
+    name: str
+    role: str | None
+    duration_months: int | None
+    duration_text: str | None
+    technologies: list[str]
+    description: str | None
+    link: str | None
+    company: str | None                 # the job it was written under, when known
+    company_basis: str | None           # "inside job" / "only employer"
 
 
 class ProfileJobOut(BaseModel):
@@ -36,8 +50,11 @@ class ProfileOut(BaseModel):
     headline: str | None
     summary: str | None
     total_experience_years: float | None
+    experience_basis: str | None = None   # "dated jobs" / "stated in resume"
+    stated_years: float | None = None     # "6+ years" as written
     skills: list[ProfileSkillOut]
     experience: list[ProfileJobOut]
+    projects: list[ProfileProjectOut] = []
     education: list[EducationOut]
     certifications: list[str]
     rejected_skills: list[dict]     # what the hallucination check removed

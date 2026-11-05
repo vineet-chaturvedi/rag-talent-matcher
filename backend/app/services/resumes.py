@@ -87,6 +87,41 @@ def employee_code_from_filename(filename: str) -> str | None:
     return match.group(1).upper() if match else None
 
 
+def _name_tokens(text: str) -> list[str]:
+    return [t for t in re.split(r"[^a-z0-9]+", (text or "").lower()) if t]
+
+
+def match_employee_by_filename(filename: str, employees: list[Employee]) -> tuple[Employee | None, str | None]:
+    """
+    For files WITHOUT an employee code (doc 18: 8 of 9 real resumes are named like "Rajendra - Full Stack.pdf"):
+    the employee whose full name is written at the start of the file name.
+      "Mahesh S - Full-Stack Developer.pdf" -> the employee "Mahesh S."
+      "Ravi (React-Native Developer).pdf"   -> ambiguous if two employees are called Ravi: returns an error
+    Returns (employee, None) or (None, reason).
+    """
+    tokens = _name_tokens(Path(filename).stem)
+    matches = []
+    for employee in employees:
+        name = _name_tokens(employee.full_name)
+        if name and tokens[:len(name)] == name:
+            matches.append(employee)
+    if len(matches) > 1:                                   # "Ravi" and "Ravi Kumar": prefer the longest full match
+        longest = max(len(_name_tokens(e.full_name)) for e in matches)
+        matches = [e for e in matches if len(_name_tokens(e.full_name)) == longest]
+    if len(matches) == 1:
+        return matches[0], None
+    if not matches:
+        first_name = [e for e in employees if tokens and _name_tokens(e.full_name)[:1] == tokens[:1]]
+        if first_name:                                     # "Ravi (...).pdf" with "Ravi Kumar" and "Ravi Sharma"
+            codes = ", ".join(e.employee_code for e in first_name)
+            return None, f"The file name only gives a first name that several employees share ({codes}). " \
+                         "Upload it on the right employee's page."
+        return None, "No employee code or employee name in the file name. Name it like EMP-1001_name.pdf, " \
+                     "or upload it on the employee's page."
+    codes = ", ".join(e.employee_code for e in matches)
+    return None, f"The file name matches several employees ({codes}). Upload it on the right employee's page."
+
+
 async def delete_resume(session: AsyncSession, resume: Resume) -> None:
     """Delete one resume version: database rows (cascade) + the file. Promote the newest remaining version."""
     resume_id, employee_id, was_current, path = resume.id, resume.employee_id, resume.is_current, resume.stored_path

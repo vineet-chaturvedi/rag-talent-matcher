@@ -15,7 +15,8 @@ type ItemState = "waiting" | "uploading" | "done" | "failed";
 type Item = { id: string; file: File; code: string | null; state: ItemState; message?: string };
 
 /**
- * Drag-and-drop bulk upload (admins). Files must be named after the employee code: EMP-1001_name.pdf.
+ * Drag-and-drop bulk upload (admins). Files are matched to employees by the code at the start of the name
+ * (EMP-1001_name.pdf) or, without a code, by the employee's full name ("Rajendra - Full Stack.pdf").
  *
  * How it works:
  *   1. Files are checked in the browser first (type, size) so obvious mistakes show at once.
@@ -72,7 +73,11 @@ export function BulkUpload() {
           } else if (!result.ok) {
             update(item.id, { state: "failed", message: result.error ?? "Rejected." });
           } else {
-            update(item.id, { state: "done", message: "Queued for processing" });
+            update(item.id, {
+              state: "done",
+              code: result.employee_code ?? item.code,
+              message: "Queued for processing",
+            });
           }
         } catch {
           update(item.id, { state: "failed", message: BACKEND_UNREACHABLE });
@@ -114,7 +119,8 @@ export function BulkUpload() {
         <Upload className="size-6 text-muted-foreground" aria-hidden />
         <span className="text-sm font-medium">Drop resumes here, or click to choose files</span>
         <span className="text-xs text-muted-foreground">
-          PDF or DOCX, up to 10 MB each, named after the employee code: <code>EMP-1001_name.pdf</code>
+          PDF, DOCX or DOC, up to 25 MB each, named after the employee code (<code>EMP-1001_name.pdf</code>) or starting
+          with the employee&apos;s full name
         </span>
         <input
           ref={inputRef}

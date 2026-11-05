@@ -34,8 +34,8 @@ from app.schemas.resume import (
 )
 from app.services.indexing import requeue_for_embedding
 from app.services.resumes import (
-    DuplicateResumeError, add_resume, delete_resume, employee_code_from_filename, requeue_for_extraction,
-    retry_resume,
+    DuplicateResumeError, add_resume, delete_resume, employee_code_from_filename, match_employee_by_filename,
+    requeue_for_extraction, retry_resume,
 )
 
 router = APIRouter(tags=["resumes"])
@@ -50,7 +50,7 @@ def _wake(worker: IngestionWorker | None) -> None:
 @router.post("/api/employees/{employee_id}/resumes", response_model=ResumeOut, status_code=status.HTTP_201_CREATED)
 async def upload_resume(
     employee_id: int,
-    file: UploadFile = File(..., description="PDF or DOCX"),
+    file: UploadFile = File(..., description="PDF, DOCX or DOC"),
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
     worker: IngestionWorker | None = Depends(get_worker),
@@ -74,7 +74,7 @@ async def upload_resume(
 
 @router.post("/api/resumes/bulk", response_model=BulkUploadResult)
 async def bulk_upload(
-    files: list[UploadFile] = File(..., description="Many PDF/DOCX files named like EMP-1001_anything.pdf"),
+    files: list[UploadFile] = File(..., description="Many PDF/DOCX/DOC files, named like EMP-1001_anything.pdf or starting with the employee's name"),
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
     worker: IngestionWorker | None = Depends(get_worker),
@@ -83,8 +83,9 @@ async def bulk_upload(
     if len(files) > settings.max_files_per_batch:
         raise HTTPException(status_code=400, detail=f"At most {settings.max_files_per_batch} files per upload.")
 
-    # Load the code -> employee map once for the whole batch.
-    employees = {e.employee_code.upper(): e for e in (await db.scalars(select(Employee))).all()}
+    # Load the employees once for the whole batch.
+    all_employees = (await db.scalars(select(Employee))).all()
+    employees = {e.employee_code.upper(): e for e in all_employees}
 
     items: list[UploadItemResult] = []
     for upload in files:
@@ -92,9 +93,12 @@ async def bulk_upload(
         code = employee_code_from_filename(name)
         employee = employees.get(code or "")
         if employee is None:
-            items.append(UploadItemResult(filename=name, ok=False, employee_code=code,
-                                          error=f"No employee with code '{code}'. Name files like EMP-1001_name.pdf"))
-            continue
+            # No code in the name ("Rajendra - Full Stack.pdf"): try the employee's name (doc 18, P4).
+            employee, reason = match_employee_by_filename(name, all_employees)
+            if employee is None:
+                items.append(UploadItemResult(filename=name, ok=False, employee_code=None, error=reason))
+                continue
+            code = employee.employee_code
         data = await upload.read(settings.max_upload_bytes + 1)
         try:
             resume = await add_resume(db, settings, employee, name, data, uploaded_by_id=user.id)
@@ -186,6 +190,7 @@ async def get_profile(resume_id: int, db: AsyncSession = Depends(get_db)):
             selectinload(Resume.profile),
             selectinload(Resume.experiences),
             selectinload(Resume.skills).selectinload(ResumeSkill.skill),
+            selectinload(Resume.projects),
         )
     )
     if resume is None:
@@ -193,7 +198,7 @@ async def get_profile(resume_id: int, db: AsyncSession = Depends(get_db)):
     if resume.profile is None:
         raise HTTPException(status_code=404, detail=f"No profile yet (resume status is '{resume.status}').")
     profile, raw = resume.profile, resume.profile.raw_extraction or {}
-    skills = sorted(resume.skills, key=lambda link: (-(link.years or 0), link.skill.name.lower()))
+    skills = sorted(resume.skills, key=lambda link: (-(link.years or 0), -(link.uses or 0), link.skill.name.lower()))
     return ProfileOut(
         resume_id=resume.id,
         employee_code=resume.employee.employee_code,
@@ -203,10 +208,19 @@ async def get_profile(resume_id: int, db: AsyncSession = Depends(get_db)):
         headline=profile.headline,
         summary=profile.summary,
         total_experience_years=profile.total_experience_years,
+        experience_basis=raw.get("experience_basis") or ("dated jobs" if resume.experiences else None),
+        stated_years=raw.get("stated_years"),
         skills=[
             {"name": link.skill.name, "category": link.skill.category, "years": link.years,
-             "last_used_year": link.last_used_year, "evidence": link.evidence}
+             "last_used_year": link.last_used_year, "evidence": link.evidence,
+             "uses": link.uses or 0, "source": link.source}
             for link in skills
+        ],
+        projects=[
+            {"name": p.name, "role": p.role, "duration_months": p.duration_months, "duration_text": p.duration_text,
+             "technologies": p.technologies or [], "description": p.description, "link": p.link,
+             "company": p.company, "company_basis": p.company_basis}
+            for p in resume.projects
         ],
         experience=[
             {"title": e.title, "company": e.company, "start_date": e.start_date, "end_date": e.end_date,
