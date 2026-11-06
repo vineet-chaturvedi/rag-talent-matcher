@@ -12,6 +12,7 @@ recommend, but it cannot upload, delete or change anything ("least privilege").
 """
 import json
 import logging
+import re
 from dataclasses import dataclass
 from datetime import date
 
@@ -22,6 +23,8 @@ from sqlalchemy.orm import selectinload
 
 from app.config import Settings
 from app.db.enums import MatchRunStatus, ResumeStatus
+from app.extraction.postprocess import normalize_for_match
+from app.extraction.skills import find_skills, is_known, normalize_skill
 from app.db.models import (Employee, MatchResult, MatchRun, Project, Resume, ResumeProfile,
                            ResumeSkill, User)
 from app.llm.ollama_client import OllamaClient
@@ -103,36 +106,98 @@ async def search_employees(ctx: ToolContext, a: SearchArgs) -> dict:
     } for m in matches]}
 
 
+# A wider pool than asked for, so that people WITH the skills are not crowded out by people the meaning search
+# finds similar but who lack every required skill (those are removed below).
+POOL_FACTOR, MIN_POOL = 4, 20
+
+
+def mentions(text: str, skill: str) -> bool:
+    """
+    Does the resume text name this skill?
+    A skill our catalogue knows is found with the same rules as extraction (every spelling, "WP" for WordPress,
+    common words like "Go" only when capitalised), so this only differs from the skill rows for resumes
+    extracted before the catalogue learned the skill. Any other skill: the term as a whole word.
+    """
+    names = normalize_skill(skill)
+    if names and is_known(names[0]):
+        return names[0] in {canonical for canonical, _, _ in find_skills(text)}
+    term = normalize_for_match(skill)
+    return bool(term) and re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", normalize_for_match(text)) is not None
+
+
 async def find_candidates(ctx: ToolContext, a: FindCandidatesArgs) -> dict:
     requirements = normalise_skill_sections({
         "must_have": [{"name": s, "min_years": None} for s in a.must_have],
         "nice_to_have": [{"name": s, "min_years": None} for s in a.nice_to_have],
     })
-    skills = ", ".join(s["name"] for s in requirements["must_have"])
+    must = [s["name"] for s in requirements["must_have"]]
+    skills = ", ".join(must)
     requirements.update(title="Ad-hoc request", seniority="unspecified", min_total_years=a.min_total_years,
                         location=a.location, domain=[], edited_by_user=True,   # stated by a person: no grounding
                         search_summary=a.description or f"Experience with {skills}")
     role = AdHocRole("Ad-hoc request", a.description, requirements, a.allocation_percent, a.start_date, a.location)
-    candidates, _ = await retrieve_candidates(ctx.session, ctx.ollama, ctx.settings, role, top_k=a.top_k,
+    pool = max(a.top_k * POOL_FACTOR, MIN_POOL)
+    candidates, _ = await retrieve_candidates(ctx.session, ctx.ollama, ctx.settings, role, top_k=pool,
                                               only_available=a.only_available)
+
+    # Someone who has NONE of the required skills is not a candidate, however similar their resume reads
+    # (the meaning search finds "web developers" for "WordPress developer"). Exception: the resume text names
+    # the skill but it wasn't extracted as one (a skill our catalog doesn't know): kept, and said so.
+    texts = dict((await ctx.session.execute(
+        select(Resume.id, Resume.raw_text).where(Resume.id.in_([c.resume_id for c in candidates if c.must_missing]))
+    )).all()) if must and candidates else {}
+    kept, text_only, dropped = [], {}, 0
+    for c in candidates:
+        named = [s for s in c.must_missing if mentions(texts.get(c.resume_id) or "", s)]
+        if named:
+            text_only[c.resume_id] = named
+        if not must or c.must_matched or named:
+            kept.append(c)
+        else:
+            dropped += 1
+
     years = dict((await ctx.session.execute(
         select(Resume.employee_id, ResumeProfile.total_experience_years)
         .join(ResumeProfile, ResumeProfile.resume_id == Resume.id)
-        .where(Resume.id.in_([c.resume_id for c in candidates]))
-    )).all()) if candidates else {}
-    scored = score_candidates(candidates, role, requirements, years, ctx.settings.score_weights)
-    return {
-        "requirements_used": {"must_have": [s["name"] for s in requirements["must_have"]],
-                              "nice_to_have": [s["name"] for s in requirements["nice_to_have"]]},
-        "candidates": [{
+        .where(Resume.id.in_([c.resume_id for c in kept]))
+    )).all()) if kept else {}
+    scored = score_candidates(kept, role, requirements, years, ctx.settings.score_weights)[:a.top_k]
+
+    rows = []
+    for c, b in scored:
+        matched = [_match_text(m) for m in c.must_matched]
+        matched += [f"{s} (named in the resume text only, no years known)" for s in text_only.get(c.resume_id, [])]
+        missing = [s for s in c.must_missing if s not in text_only.get(c.resume_id, [])]
+        line = f"{c.employee.employee_code} {c.employee.full_name}: {'; '.join(matched)}"
+        if missing:
+            line += f"; missing: {', '.join(missing)}"
+        if c.nice_matched:
+            line += f"; also has: {', '.join(m.required for m in c.nice_matched)}"
+        line += f"; {c.availability.note}"
+        rows.append({
+            "summary": line,   # one ready-made line: small models copy it instead of re-writing the numbers
             "employee_code": c.employee.employee_code, "name": c.employee.full_name,
             "designation": c.employee.designation, "location": c.employee.location,
             "score": b["rule_score"], "total_years": b["total_years"],
-            "matched": [_match_text(m) for m in c.must_matched],
-            "missing": c.must_missing,
+            "matched": matched, "missing": missing,
             "nice_matched": [m.required for m in c.nice_matched],
             "availability": c.availability.note,
-        } for c, b in scored],
+        })
+
+    if not rows:
+        note = (f"Nobody has {skills} in their resume. Say so; do not suggest people without these skills "
+                f"unless the user asks for alternatives.")
+    else:
+        note = f"{len(kept)} {'person has' if len(kept) == 1 else 'people have'} at least one required skill"
+        note += "." if len(kept) == len(rows) else f"; the best {len(rows)} are shown."
+        if dropped:
+            note += f" {dropped} others came up in search but have none of the required skills; they are left out."
+        if len(rows) < a.top_k:
+            note += f" Fewer than {a.top_k}: report only these, do not add others."
+    return {
+        "requirements_used": {"must_have": must, "nice_to_have": [s["name"] for s in requirements["nice_to_have"]]},
+        "note": note,
+        "candidates": rows,
     }
 
 
@@ -245,6 +310,7 @@ TOOLS = {
     "find_candidates": (find_candidates, FindCandidatesArgs,
         "Rank employees for a staffing need given required skills (and optionally years, location, start date, "
         "allocation). Uses skill matching, keyword and meaning search, experience and availability. "
+        "Returns only people with at least one required skill. "
         "Use this for 'who can do X' or 'find someone for Y' questions."),
     "get_employee_profile": (get_employee_profile, EmployeeArgs,
         "Details of one employee: skills with years and last used year, jobs, certifications, availability."),

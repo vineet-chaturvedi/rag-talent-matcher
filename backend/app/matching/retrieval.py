@@ -117,6 +117,16 @@ ESTIMATE_WEIGHT = 0.75
 # What a mention that is not use is worth, instead of the years factor.
 SOURCE_FACTOR = {"certified": 0.65, "learning": 0.3}
 LEVEL_FACTOR = {"basic": 0.7}
+# Depth (2026-11-06): beyond meeting the role's minimum, more years of the skill still count, with diminishing
+# returns, reaching the full depth credit at DEPTH_FULL_YEARS. Before, 2.5 and 9.3 years of Python scored the
+# same when the role named no minimum (2 years were "enough"), so the search order decided the ranking.
+DEPTH_FULL_YEARS = 10.0
+YEARS_FLOOR, MEETS_SHARE, DEPTH_SHARE = 0.4, 0.35, 0.25   # 0.4 + 0.35 + 0.25 = 1.0
+
+
+def depth_of(years: float) -> float:
+    """0..1, log-shaped: 1 y 0.29 · 2 y 0.46 · 3 y 0.58 · 5 y 0.75 · 8 y 0.92 · 10 y+ 1.0"""
+    return min(1.0, math.log1p(max(0.0, years)) / math.log1p(DEPTH_FULL_YEARS))
 
 
 def _credit(direct: bool, years: float | None, last_used: int | None, needed_years: float, uses: int = 0,
@@ -124,7 +134,9 @@ def _credit(direct: bool, years: float | None, last_used: int | None, needed_yea
     """
     How well one employee skill covers one requirement (0..1):
       base     1.0 for the exact skill, 0.6 for an implied one (EKS for Kubernetes)
-      years    0.4 + 0.6 * min(1, years / needed); an ESTIMATED duration counts at 75%
+      years    0.4 + 0.35 * min(1, years / needed) + 0.25 * depth(years); an ESTIMATED duration counts at 75%
+               meets the minimum (needed = the role's min years, else 2) AND more is better:
+               2 y -> 0.87 · 5 y -> 0.94 · 9 y -> 0.99 (no minimum stated)
                unknown years: by how many projects used it (doc 18: most real resumes have no dated jobs)
                only listed 0.6 · 1 project 0.7 · 2 projects 0.8 · 3 or more 0.9
                certified, never shown in use 0.65 · only "currently learning" 0.3
@@ -138,7 +150,8 @@ def _credit(direct: bool, years: float | None, last_used: int | None, needed_yea
         years_factor = 0.6 if not uses else min(0.9, 0.6 + 0.1 * uses)
     else:
         counted = years * ESTIMATE_WEIGHT if years_basis == "estimated" else years
-        years_factor = 0.4 + 0.6 * min(1.0, counted / needed_years)
+        years_factor = (YEARS_FLOOR + MEETS_SHARE * min(1.0, counted / needed_years)
+                        + DEPTH_SHARE * depth_of(counted))
     years_factor *= LEVEL_FACTOR.get(level or "", 1.0)
     if last_used is None:
         recency = 0.8
