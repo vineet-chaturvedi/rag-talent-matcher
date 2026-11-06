@@ -121,8 +121,8 @@ async def main() -> int:
     settings = get_settings()
     ollama = None
     if not args.offline:
-        from app.llm.ollama_client import OllamaClient
-        ollama = OllamaClient(settings.ollama_base_url, settings.ollama_timeout_seconds)
+        from app.llm.router import make_model_client
+        ollama = make_model_client(settings)
 
     passed = failed = 0
     try:

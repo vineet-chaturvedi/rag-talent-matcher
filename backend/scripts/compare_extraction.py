@@ -17,7 +17,7 @@ from app.db.models import Employee, Resume
 from app.db.session import SessionLocal, engine
 from app.extraction.extractor import extract_profile
 from app.extraction.postprocess import Profile
-from app.llm.ollama_client import OllamaClient
+from app.llm.router import make_model_client
 
 
 def skill(p: Profile, name: str):
@@ -63,7 +63,7 @@ CHECKS = {
 
 async def main(models: list[str], codes: list[str]) -> None:
     settings = get_settings()
-    ollama = OllamaClient(settings.ollama_base_url, settings.ollama_timeout_seconds)
+    ollama = make_model_client(settings)
     async with SessionLocal() as session:
         rows = (await session.execute(
             select(Employee.employee_code, Resume.raw_text)
@@ -77,7 +77,7 @@ async def main(models: list[str], codes: list[str]) -> None:
 
     summary = []
     for role in models:
-        model = settings.fast_llm_model if role == "fast" else settings.quality_llm_model
+        model = settings.model_for(role)   # fast | quality | any Ollama model name
         print(f"\n{'=' * 70}\n{role.upper()} model: {model}\n{'=' * 70}")
         passed = total = 0
         seconds: list[float] = []
@@ -124,7 +124,8 @@ async def main(models: list[str], codes: list[str]) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--models", nargs="+", default=["fast", "quality"], choices=["fast", "quality"])
+    parser.add_argument("--models", nargs="+", default=["fast", "quality"],
+                        help="fast, quality or Ollama model names, e.g. --models qwen2.5:3b qwen3.5:4b")
     parser.add_argument("--codes", nargs="+", default=list(CHECKS))
     args = parser.parse_args()
     asyncio.run(main(args.models, args.codes))

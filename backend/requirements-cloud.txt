@@ -1,0 +1,7 @@
+# Optional: only needed when a model setting uses a cloud provider (doc 20, app/llm/router.py).
+#   openai/, azure/, gemini/ (chat), compat/  -> the OpenAI SDK
+#   anthropic/                                -> the Anthropic SDK
+#   voyage/, cohere/, gemini/ (embeddings)    -> nothing extra (plain HTTP with httpx)
+# Install:  pip install -r requirements-cloud.txt
+openai>=1.50
+anthropic>=0.40

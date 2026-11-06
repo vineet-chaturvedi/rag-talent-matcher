@@ -19,13 +19,15 @@ class DatabaseHealth(BaseModel):
 
 class ModelHealth(BaseModel):
     name: str
-    installed: bool
+    installed: bool                  # Ollama: pulled; other providers: configured (key set, allowed)
+    provider: str | None = None      # "Ollama", "Anthropic", "OpenAI" ...
+    problem: str | None = None       # why it can't be used, in plain words
 
 
 class OllamaHealth(BaseModel):
     reachable: bool
     version: str | None = None
-    models: dict[str, ModelHealth] | None = None    # keys: embed_model, fast_llm_model, quality_llm_model
+    models: dict[str, ModelHealth] | None = None    # keys: embed_model, fast_llm_model, quality_llm_model, (task)_model
     error: str | None = None
 
 

@@ -43,7 +43,11 @@ function HealthDetails({ health }: { health: Health }) {
           key={role}
           label={MODEL_LABEL[role] ?? role}
           ok={model.installed}
-          value={model.installed ? model.name : `${model.name} (not installed)`}
+          value={
+            model.installed
+              ? `${model.name}${model.provider && model.provider !== "Ollama" ? ` · ${model.provider}` : ""}`
+              : `${model.name} (${model.problem ?? "not installed"})`
+          }
         />
       ))}
     </dl>

@@ -6,10 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import SessionLocal
 from app.ingestion.worker import IngestionWorker
-from app.llm.ollama_client import OllamaClient
+from app.llm.router import ModelRouter
 
 
-def get_ollama(request: Request) -> OllamaClient:
+def get_ollama(request: Request) -> ModelRouter:
     # The client was created once at startup (see lifespan in main.py) and stored on app.state.
     return request.app.state.ollama
 

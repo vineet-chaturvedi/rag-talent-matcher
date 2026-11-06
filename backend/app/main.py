@@ -15,10 +15,11 @@ from app.config import get_settings
 from app.db.session import engine, init_db
 from app.services.users import count_users
 from app.ingestion.worker import IngestionWorker
-from app.llm.ollama_client import OllamaClient
+from app.llm.router import make_model_client
 from app.matching.runner import recover_interrupted_runs
 from app.rag.keyword_index import ensure_keyword_index
 from app.rag.vector_store import get_vector_store
+from app.services.indexing import requeue_for_embedding
 
 settings = get_settings()
 
@@ -34,9 +35,21 @@ async def lifespan(app: FastAPI):
     # ---- startup ----
     await init_db()
     logger.info("Database ready (%s)", settings.database_url)
-    app.state.ollama = OllamaClient(settings.ollama_base_url, settings.ollama_timeout_seconds)
-    store = get_vector_store()   # opens (or creates) data/chroma
-    logger.info("Vector store ready (%s): %d chunks", settings.chroma_dir, store.count())
+    # One client for every model of every provider (app/llm/router.py). Named "ollama" for history's sake.
+    app.state.ollama = make_model_client(settings)
+    if cloud := app.state.ollama.cloud_models_in_use():
+        state = "ALLOWED" if settings.allow_cloud_models else "BLOCKED until ALLOW_CLOUD_MODELS=true"
+        logger.warning("Cloud models configured (%s): %s. They receive resume text and role descriptions.",
+                       state, ", ".join(cloud))
+    store = get_vector_store()   # opens (or creates) data/chroma, the collection of the current EMBED_MODEL
+    logger.info("Vector store ready (%s, collection %s): %d chunks", settings.chroma_dir,
+                settings.vector_collection, store.count())
+    logger.info("Models: %s", ", ".join(f"{k}={v}" for k, v in settings.models_in_use.items()))
+    if settings.auto_reembed_on_model_change and (
+            stale := await requeue_for_embedding(settings.embedding_signature)):
+        logger.warning("Embeddings are now made with %s: %d resume(s) were embedded with another model or size "
+                       "and are queued for re-embedding (the worker does it in the background).",
+                       settings.embedding_signature, stale)
     await ensure_keyword_index()  # SQLite FTS5 table for keyword (BM25) search, rebuilt if out of sync
     if interrupted := await recover_interrupted_runs():
         logger.warning("%d match run(s) were interrupted by the last shutdown and marked failed", interrupted)

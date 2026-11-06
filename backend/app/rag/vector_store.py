@@ -78,6 +78,10 @@ class VectorStore:
 
 @lru_cache
 def get_vector_store() -> VectorStore:
-    """One shared instance for the whole process (opening ChromaDB is not free)."""
+    """
+    One shared instance for the whole process (opening ChromaDB is not free).
+    Its collection belongs to the current EMBED_MODEL (app/llm/models.py: collection_name), because vectors
+    of different models have different lengths and meanings and must never be mixed.
+    """
     settings = get_settings()
-    return VectorStore(settings.chroma_dir, settings.chroma_collection)
+    return VectorStore(settings.chroma_dir, settings.vector_collection)

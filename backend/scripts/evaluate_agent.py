@@ -45,7 +45,8 @@ from app.db.enums import ResumeStatus, UserRole
 from app.db.models import Employee, Resume, ResumeSkill, Skill, User
 from app.db.session import SessionLocal, init_db
 from app.extraction.skills import implied_by, normalize_skill
-from app.llm.ollama_client import OllamaClient, OllamaError
+from app.llm.ollama_client import OllamaError
+from app.llm.router import make_model_client
 from app.matching.retrieval import ESTIMATE_WEIGHT
 
 BACKEND = Path(__file__).resolve().parents[1]
@@ -261,7 +262,7 @@ async def main() -> int:
     data = json.loads(CASES.read_text(encoding="utf-8"))
     cases = [c for c in data["cases"] if not args.only or c["id"] in args.only]
     await init_db()
-    ollama = OllamaClient(settings.ollama_base_url, settings.ollama_timeout_seconds)
+    ollama = make_model_client(settings)
     model = settings.agent_model
     results = []
     started = time.perf_counter()
@@ -345,7 +346,8 @@ async def main() -> int:
         REPORTS.mkdir(parents=True, exist_ok=True)
         path = REPORTS / f"agent-{datetime.now():%Y%m%d-%H%M%S}.json"
         path.write_text(json.dumps({"kind": "agent", "created": datetime.now().isoformat(timespec="seconds"),
-                                    "model": model, "summary": summary, "cases": results},
+                                    "model": model, "models": settings.models_in_use,
+                                    "summary": summary, "cases": results},
                                    indent=1, default=str), encoding="utf-8")
         print(f"Report: {path.relative_to(BACKEND)}")
     return 0 if run and summary["cases_passed"] == len(run) else 1

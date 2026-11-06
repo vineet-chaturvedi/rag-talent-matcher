@@ -27,7 +27,7 @@ from app.config import get_settings
 from app.db.enums import ResumeStatus
 from app.db.models import ProjectRole, Resume
 from app.db.session import SessionLocal, init_db
-from app.llm.ollama_client import OllamaClient
+from app.llm.router import make_model_client
 from app.matching.retrieval import retrieve_candidates
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -78,7 +78,7 @@ async def main() -> int:
         return 1
 
     queries = json.loads(QUERIES.read_text(encoding="utf-8"))["queries"]
-    ollama = OllamaClient(settings.ollama_base_url, settings.ollama_timeout_seconds)
+    ollama = make_model_client(settings)
     totals = {run: [0, 0.0, 0.0, 0] for run in runs}
     try:
         for q in queries:

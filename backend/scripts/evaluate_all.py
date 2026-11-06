@@ -33,6 +33,8 @@ from pathlib import Path
 
 import httpx
 
+from app.config import get_settings
+
 BACKEND = Path(__file__).resolve().parents[1]
 REPORTS = BACKEND / "evaluation" / "reports"
 TOLERANCE = 0.005          # rounding noise: 0.83 -> 0.825 is not a regression
@@ -155,6 +157,7 @@ def main() -> int:
 
     created = datetime.now()
     report = {"kind": "all", "created": created.isoformat(timespec="seconds"), "note": args.note,
+              "models": get_settings().models_in_use,   # which models produced these numbers
               "compared_with": {n: b["created"] for n, b in before.items() if n in suites},
               "regressions": regressions, "suites": suites}
     REPORTS.mkdir(parents=True, exist_ok=True)
@@ -180,6 +183,8 @@ def markdown(report: dict, before: dict[str, dict]) -> str:
     lines = [f"# Evaluation report {report['created']}", ""]
     if report["note"]:
         lines += [f"Change: {report['note']}", ""]
+    if report.get("models"):
+        lines += ["Models: " + ", ".join(f"{k} `{v}`" for k, v in report["models"].items()), ""]
     lines += ["| Suite | Status | Numbers | Before | Time |", "|---|---|---|---|---|"]
     for name, s in report["suites"].items():
         old = (before.get(name) or {}).get("metrics") or {}

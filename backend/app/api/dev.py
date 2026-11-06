@@ -17,6 +17,8 @@ from app.config import Settings, get_settings
 from app.db.models import Resume
 from app.extraction.extractor import ExtractionOutputError, extract_profile
 from app.llm.ollama_client import OllamaClient, OllamaError
+from app.llm.models import apply
+from app.rag.embeddings import profile_for
 
 router = APIRouter(prefix="/api/dev", tags=["dev (learning only)"])
 
@@ -52,7 +54,7 @@ async def dev_chat(
     ollama: OllamaClient = Depends(get_ollama),
     settings: Settings = Depends(get_settings),
 ):
-    model = settings.fast_llm_model if req.model == "fast" else settings.quality_llm_model
+    model = settings.model_for(req.model)
 
     messages = []
     if req.system:
@@ -80,7 +82,7 @@ async def dev_chat(
 class SimilarityRequest(BaseModel):
     text_a: str = Field(..., min_length=1, examples=["Looking for a backend developer with Django experience"])
     text_b: str = Field(..., min_length=1, examples=["Built REST APIs in Python for 4 years"])
-    use_prefixes: bool = Field(True, description="Add nomic's search_query:/search_document: prefixes")
+    use_prefixes: bool = Field(True, description="Add the embedding model's query/document prompts (app/llm/models.py)")
 
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:
@@ -101,10 +103,12 @@ async def dev_similarity(
     settings: Settings = Depends(get_settings),
 ):
     # text_a plays the "job/query" role, text_b the "resume/document" role.
-    a = f"search_query: {req.text_a}" if req.use_prefixes else req.text_a
-    b = f"search_document: {req.text_b}" if req.use_prefixes else req.text_b
+    profile = profile_for(settings.embed_model)
+    a = apply(profile.query_template, req.text_a) if req.use_prefixes else req.text_a
+    b = apply(profile.document_template, req.text_b) if req.use_prefixes else req.text_b
     try:
-        vec_a, vec_b = await ollama.embed([a, b], model=settings.embed_model)
+        vec_a = (await ollama.embed([a], model=settings.embed_model, kind="query"))[0]
+        vec_b = (await ollama.embed([b], model=settings.embed_model, kind="document"))[0]
     except OllamaError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     return {
@@ -129,7 +133,7 @@ async def dev_extract(
         raise HTTPException(status_code=404, detail="Resume not found")
     if not resume.raw_text:
         raise HTTPException(status_code=409, detail=f"Resume has no text yet (status '{resume.status}').")
-    model_name = settings.fast_llm_model if model == "fast" else settings.quality_llm_model
+    model_name = settings.model_for(model)
     try:
         outcome = await extract_profile(
             ollama, resume.raw_text, model=model_name, num_ctx=settings.llm_num_ctx,

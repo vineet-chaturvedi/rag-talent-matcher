@@ -169,21 +169,29 @@ class IngestionWorker:
             logger.warning("Resume %s failed permanently: %s", job.id, exc)
             await self._update(job.id, status=ResumeStatus.FAILED, error_message=str(exc))
         except OllamaError as exc:
-            # Ollama is down or busy: not the resume's fault. Undo the attempt and pause.
-            logger.warning("Ollama unavailable (%s). Pausing %.0fs.", exc, self.settings.ollama_retry_seconds)
+            if not exc.retryable:
+                # The model service refused THIS request (too long, blocked ...): a normal failed attempt.
+                await self._failed_attempt(job, exc)
+                return True
+            # The model service is down, busy or not set up: not the resume's fault. Undo the attempt and pause.
+            logger.warning("Model service unavailable (%s). Pausing %.0fs.", exc, self.settings.ollama_retry_seconds)
             await self._update(job.id, status=job.stage.waiting, attempts=job.attempt - 1,
-                               error_message=f"Waiting for Ollama: {exc}")
+                               error_message=f"Waiting for the model service: {exc}")
             await self._sleep(self.settings.ollama_retry_seconds)
         except Exception as exc:
             logger.exception("Resume %s: unexpected error during %s", job.id, job.stage.name)
-            give_up = job.attempt >= self.settings.worker_max_attempts
-            note = f"gave up after {job.attempt} attempts" if give_up else "will retry"
-            await self._update(
-                job.id,
-                status=ResumeStatus.FAILED if give_up else job.stage.waiting,
-                error_message=f"{job.stage.name}: {type(exc).__name__}: {exc} ({note})",
-            )
+            await self._failed_attempt(job, exc)
         return True
+
+    async def _failed_attempt(self, job: Claimed, exc: Exception) -> None:
+        """Count one failed attempt: try again later, or give up after worker_max_attempts."""
+        give_up = job.attempt >= self.settings.worker_max_attempts
+        note = f"gave up after {job.attempt} attempts" if give_up else "will retry"
+        await self._update(
+            job.id,
+            status=ResumeStatus.FAILED if give_up else job.stage.waiting,
+            error_message=f"{job.stage.name}: {type(exc).__name__}: {exc} ({note})",
+        )
 
     # ------------------------------------------------------------------ stages
     async def _parse(self, job: Claimed) -> None:

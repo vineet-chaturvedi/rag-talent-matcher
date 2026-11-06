@@ -72,7 +72,7 @@ async def index_resume(resume_id: int, ollama: OllamaClient, settings: Settings)
     # ChromaDB metadata must be plain str/int/float/bool values (no None, no lists).
     metadatas = [
         {"resume_id": resume_id, "employee_id": employee_id, "employee_code": employee_code,
-         "section": d.section.value, "chunk_index": i, "embedding_model": settings.embed_model,
+         "section": d.section.value, "chunk_index": i, "embedding_model": settings.embedding_signature,
          **{k: v for k, v in d.meta.items() if isinstance(v, (str, int, float, bool))}}
         for i, d in enumerate(drafts)
     ]
@@ -89,7 +89,7 @@ async def index_resume(resume_id: int, ollama: OllamaClient, settings: Settings)
         await session.execute(delete(ResumeChunk).where(ResumeChunk.resume_id == resume_id))
         session.add_all(
             ResumeChunk(id=cid, resume_id=resume_id, section=d.section, chunk_index=i, text=d.text,
-                        token_count=d.token_estimate, embedding_model=settings.embed_model, meta=d.meta or None)
+                        token_count=d.token_estimate, embedding_model=settings.embedding_signature, meta=d.meta or None)
             for i, (cid, d) in enumerate(zip(ids, drafts))
         )
         await replace_resume_rows(session, resume_id, employee_id, [(cid, d.text) for cid, d in zip(ids, drafts)])
@@ -102,14 +102,20 @@ async def index_resume(resume_id: int, ollama: OllamaClient, settings: Settings)
     return True
 
 
-async def requeue_for_embedding() -> int:
-    """Send every READY current resume back to the embed stage (e.g. after changing the embedding model)."""
+async def requeue_for_embedding(only_not_made_with: str | None = None) -> int:
+    """
+    Send READY current resumes back to the embed stage (after changing the embedding model).
+    only_not_made_with: only resumes with a chunk embedded by a DIFFERENT model than this one (startup check).
+    """
     async with SessionLocal() as session:
-        result = await session.execute(
-            update(Resume)
-            .where(Resume.is_current.is_(True), Resume.status == ResumeStatus.READY)
-            .values(status=ResumeStatus.EXTRACTED, attempts=0)
-        )
+        query = update(Resume).where(Resume.is_current.is_(True), Resume.status == ResumeStatus.READY)
+        if only_not_made_with:
+            names = {only_not_made_with, only_not_made_with.removesuffix(":latest"),
+                     only_not_made_with if ":" in only_not_made_with else f"{only_not_made_with}:latest"}
+            stale = select(ResumeChunk.resume_id).where(
+                ResumeChunk.embedding_model.is_(None) | ResumeChunk.embedding_model.not_in(names))
+            query = query.where(Resume.id.in_(stale))
+        result = await session.execute(query.values(status=ResumeStatus.EXTRACTED, attempts=0))
         await session.commit()
         return result.rowcount
 

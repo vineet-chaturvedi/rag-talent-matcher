@@ -1,7 +1,7 @@
 """
 Semantic search: a question in plain words -> the employees whose resume chunks are closest in meaning.
 
-  1. embed the query                     ("search_query: container orchestration")
+  1. embed the query                     (with the model's query prompt, app/llm/models.py)
   2. ask ChromaDB for the nearest chunks  (a pool, e.g. 60 chunks)
   3. keep only chunks of CURRENT, READY resumes (drops anything stale)
   4. group chunks by employee            (one employee can match through several chunks)

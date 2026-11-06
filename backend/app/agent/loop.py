@@ -18,6 +18,7 @@ from collections.abc import AsyncIterator
 
 from app.agent.prompts import system_prompt
 from app.agent.tools import ToolContext, run_tool, tool_specs
+from app.llm.models import strip_thinking
 
 
 def summarise_tool_result(name: str, result: dict) -> str:
@@ -61,6 +62,7 @@ async def run_agent(ctx: ToolContext, model: str, history: list[dict], question:
                 final = chunk
 
         if not calls:                                   # no tool requested: this is the answer
+            content = strip_thinking(content)           # a model that wrote out <think>...</think> anyway
             yield {"type": "_save", "message": {"role": "assistant", "content": content.strip()}}
             yield {"type": "answer", "text": content.strip(), "steps": step + 1, "tool_calls": tool_calls_made,
                    "seconds": round(time.perf_counter() - started, 1), "done_reason": final.get("done_reason")}

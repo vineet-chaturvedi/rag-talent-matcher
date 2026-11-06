@@ -1519,6 +1519,10 @@ export interface components {
             name: string;
             /** Installed */
             installed: boolean;
+            /** Provider */
+            provider?: string | null;
+            /** Problem */
+            problem?: string | null;
         };
         /** MustHaveVerdictOut */
         MustHaveVerdictOut: {
@@ -2177,7 +2181,7 @@ export interface components {
             text_b: string;
             /**
              * Use Prefixes
-             * @description Add nomic's search_query:/search_document: prefixes
+             * @description Add the embedding model's query/document prompts (app/llm/models.py)
              * @default true
              */
             use_prefixes: boolean;
