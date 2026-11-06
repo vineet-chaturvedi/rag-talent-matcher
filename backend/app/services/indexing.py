@@ -69,9 +69,11 @@ async def index_resume(resume_id: int, ollama: OllamaClient, settings: Settings)
 
     # 4. Vectors -> ChromaDB (first: if this fails, the database still says EMBEDDING and the stage is retried).
     ids = [str(uuid.uuid4()) for _ in drafts]
+    # ChromaDB metadata must be plain str/int/float/bool values (no None, no lists).
     metadatas = [
         {"resume_id": resume_id, "employee_id": employee_id, "employee_code": employee_code,
-         "section": d.section.value, "chunk_index": i, "embedding_model": settings.embed_model}
+         "section": d.section.value, "chunk_index": i, "embedding_model": settings.embed_model,
+         **{k: v for k, v in d.meta.items() if isinstance(v, (str, int, float, bool))}}
         for i, d in enumerate(drafts)
     ]
     await asyncio.to_thread(
@@ -87,7 +89,7 @@ async def index_resume(resume_id: int, ollama: OllamaClient, settings: Settings)
         await session.execute(delete(ResumeChunk).where(ResumeChunk.resume_id == resume_id))
         session.add_all(
             ResumeChunk(id=cid, resume_id=resume_id, section=d.section, chunk_index=i, text=d.text,
-                        token_count=d.token_estimate, embedding_model=settings.embed_model)
+                        token_count=d.token_estimate, embedding_model=settings.embed_model, meta=d.meta or None)
             for i, (cid, d) in enumerate(zip(ids, drafts))
         )
         await replace_resume_rows(session, resume_id, employee_id, [(cid, d.text) for cid, d in zip(ids, drafts)])

@@ -62,6 +62,14 @@ class Settings(BaseSettings):
     rrf_weight_skills: float = 1.0           # how much each signal counts in the fusion
     rrf_weight_keyword: float = 1.0
     rrf_weight_vector: float = 1.0
+    # Optional 4th signal: a cross-encoder reranker (app/rag/reranker.py). Empty = off.
+    # Try "Xenova/ms-marco-MiniLM-L-6-v2" (needs `pip install fastembed`; ~80 MB download on first use) and
+    # compare with `python -m scripts.evaluate_real_retrieval` before keeping it on.
+    rerank_model: str = ""
+    rerank_pool: int = 30                    # how many of the best-fused people get reranked
+    rerank_chunks_per_person: int = 8        # their best chunks (by the earlier signals), at most this many
+    rrf_weight_rerank: float = 1.0
+    models_dir: str = "./data/models"        # where downloaded models are kept
     default_skill_min_years: float = 2.0     # years assumed "enough" when a role doesn't say
 
     # ---- Scoring & LLM judge (Step 8) ----

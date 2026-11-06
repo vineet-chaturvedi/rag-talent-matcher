@@ -129,6 +129,9 @@ class ResumeChunk(Base):
     text: Mapped[str] = mapped_column(Text)
     token_count: Mapped[int | None]
     embedding_model: Mapped[str | None] = mapped_column(String(100))  # detect when re-embedding is needed
+    # Which job/project/section the chunk belongs to, its role and technologies (see rag/chunking.py).
+    # NULL for chunks indexed before this field existed; re-extracting or re-embedding fills it.
+    meta: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     resume: Mapped["Resume"] = relationship(back_populates="chunks")

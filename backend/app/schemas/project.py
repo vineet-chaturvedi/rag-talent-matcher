@@ -95,7 +95,7 @@ class ProjectOut(BaseModel):
 class CandidatesRequest(BaseModel):
     top_k: int = Field(15, ge=1, le=100)
     only_available: bool = Field(False, description="Exclude people who can't take the role's allocation by its start date")
-    signals: list[Literal["skills", "keyword", "vector"]] = ["skills", "keyword", "vector"]
+    signals: list[Literal["skills", "keyword", "vector", "rerank"]] = ["skills", "keyword", "vector", "rerank"]
 
 
 class SkillMatchOut(BaseModel):

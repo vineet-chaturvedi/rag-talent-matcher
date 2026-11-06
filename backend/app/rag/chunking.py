@@ -6,7 +6,7 @@ everything in it - a DevOps job, a Java job, education - and matches nothing sha
 A chunk is about ONE thing (one job, the profile, the rest), so its vector is precise.
 
 Each resume becomes:
-  1. a PROFILE CARD   - headline, total years, summary, skills with years or uses   (from Step 5)
+  1. a PROFILE CARD   - headline, total years, skills with years or uses: facts computed by code, labelled
   2. one EXPERIENCE chunk per job     - that job's ORIGINAL text, up to the next job or section heading
   3. one PROJECT chunk per project    - its ORIGINAL text, with its role and technologies (doc 18)
   4. SKILLS / EDUCATION / OTHER chunks - the rest, section by section, so nothing is lost
@@ -20,7 +20,7 @@ sense on its own - when it is retrieved alone, and to the embedding model.
 Pure functions only: no database, no Ollama. Easy to read and to test.
 """
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 
 from app.db.enums import ChunkSection
@@ -60,6 +60,13 @@ class ProjectInfo:
 class ChunkDraft:
     section: ChunkSection
     text: str          # header + body: exactly what is embedded, stored and shown
+    # Structured facts about the chunk, stored as real fields (not only inside the text), so search can filter
+    # on them and the judge can rebuild a whole job or project from its pieces ("small-to-big"):
+    #   entry       which entry it belongs to: "profile", "job-0", "project-3", "section-2" (the parent id)
+    #   entry_type  profile / job / project / section
+    #   entry_name  "Senior SE at Encoresky", "Finexity", "Technical Skills"
+    #   role, technologies (comma-separated), part (0, 1, 2 ... when an entry is split)
+    meta: dict = field(default_factory=dict)
 
     @property
     def token_estimate(self) -> int:
@@ -105,9 +112,11 @@ def split_text(text: str, max_chars: int, overlap: int) -> list[str]:
     pieces: list[str] = []
     current: list[str] = []
     for line in lines:
-        while len(line) > max_chars:                 # a single enormous line: hard cut
-            lines_left = line[max_chars:]
-            line_part = line[:max_chars]
+        while len(line) > max_chars:                 # a single enormous line: cut it, at a space if possible
+            cut = line.rfind(" ", max_chars // 2, max_chars)
+            cut = cut if cut > 0 else max_chars       # (never in the middle of a word when there is a space)
+            lines_left = line[cut:].lstrip()
+            line_part = line[:cut].rstrip()
             if current:
                 pieces.append("\n".join(current))
                 current = []
@@ -147,7 +156,7 @@ def build_chunks(
     raw_text: str,
     headline: str | None,
     total_years: float | None,
-    summary: str | None,
+    summary: str | None,             # kept for callers; no longer put in the card (model-written)
     skills: list[tuple],             # (name, years) or (name, years, uses) or (name, years, uses, years_basis)
     jobs: list[JobInfo],
     max_chars: int,
@@ -162,19 +171,19 @@ def build_chunks(
     skill_rows = [(s[0], s[1], s[2] if len(s) > 2 else 0, s[3] if len(s) > 3 else None) for s in skills]
     skill_names = [row[0] for row in skill_rows]
 
-    def add(section: ChunkSection, header: str, body: str) -> None:
-        for piece in split_text(clean(body), max_chars - len(header) - 1, overlap) or [""]:
-            if piece.strip():
-                chunks.append(ChunkDraft(section, f"{header}\n{piece}"))
+    def add(section: ChunkSection, header: str, body: str, meta: dict) -> None:
+        pieces = [p for p in split_text(clean(body), max_chars - len(header) - 1, overlap) if p.strip()]
+        for part, piece in enumerate(pieces):
+            chunks.append(ChunkDraft(section, f"{header}\n{piece}", {**meta, "part": part}))
 
-    # ---- 1. Profile card (from the structured profile)
-    card = [f"Employee {employee_code} | Profile"]
+    # ---- 1. Profile card: facts our CODE computed from the structured profile, labelled as such.
+    # No model-written summary in it (it is a paraphrase and can drift from the resume); the resume's own
+    # summary section is indexed as its own chunk below.
+    card = [f"Employee {employee_code} | Profile (generated from the extracted data, not resume text)"]
     if headline or total_years is not None:
         stated = " (as stated in the resume)" if experience_basis == "stated in resume" else ""
         years = f" with {total_years} years of total experience{stated}" if total_years is not None else ""
         card.append(f"{headline or 'Professional'}{years}.")
-    if summary:
-        card.append(summary)
     if skill_rows:
         def label(name: str, years: float | None, uses: int, basis: str | None) -> str:
             if years:
@@ -182,7 +191,8 @@ def build_chunks(
             return f"{name} (used in {uses} projects)" if uses > 1 else name
         card.append("Skills: " + ", ".join(label(*row) for row in skill_rows))
     if len(card) > 1:
-        chunks.append(ChunkDraft(ChunkSection.SUMMARY, clean("\n".join(card))[: max_chars * 2]))
+        chunks.append(ChunkDraft(ChunkSection.SUMMARY, clean("\n".join(card))[: max_chars * 2],
+                                 {"entry": "profile", "entry_type": "profile", "entry_name": "Profile", "part": 0}))
 
     # ---- 2. Where everything is: sections, job entries, project entries (same rules as extraction)
     lines, sections = sec.split_sections(raw_text)
@@ -212,10 +222,11 @@ def build_chunks(
     used: set[int] = set()
 
     # ---- 3. One chunk per job (its own text), with the skills written in it
-    for job, block in zip(jobs, job_blocks):
+    for job_number, (job, block) in enumerate(zip(jobs, job_blocks)):
         header = f"Employee {employee_code} | Experience | {job.title or 'Role'} at {job.company or 'unknown'} ({_period(job)})"
         if block is None:
-            body = job.description or ""          # couldn't locate it: fall back to the extracted summary
+            # Couldn't locate it in the text: fall back to the model's one-sentence description, labelled.
+            body = f"(Description written by the extraction model) {job.description}" if job.description else ""
         else:
             used.update(range(*block))
             body = "\n".join(lines[block[0]:block[1]])
@@ -224,10 +235,14 @@ def build_chunks(
         job_skills, _ = ground_job_skills(skill_names, normalize_for_match(body))
         if job_skills:
             header = f"{header}\nSkills used: {', '.join(job_skills)}"
-        add(ChunkSection.EXPERIENCE, header, body)
+        add(ChunkSection.EXPERIENCE, header, body, {
+            "entry": f"job-{job_number}", "entry_type": "job",
+            "entry_name": f"{job.title or 'Role'} at {job.company or 'unknown'}", "role": job.title or "",
+            "technologies": ", ".join(job_skills),
+        })
 
     # ---- 4. One chunk per project, with its role and technologies (doc 18)
-    for project, block in zip(projects, project_blocks):
+    for project_number, (project, block) in enumerate(zip(projects, project_blocks)):
         if block is None:
             continue
         used.update(range(*block))
@@ -241,10 +256,13 @@ def build_chunks(
         header = f"Employee {employee_code} | " + " | ".join(facts)
         if project.technologies:
             header = f"{header}\nTechnologies: {', '.join(project.technologies)}"
-        add(ChunkSection.PROJECT, header, "\n".join(lines[block[0]:block[1]]))
+        add(ChunkSection.PROJECT, header, "\n".join(lines[block[0]:block[1]]), {
+            "entry": f"project-{project_number}", "entry_type": "project", "entry_name": project.name,
+            "role": project.role or "", "technologies": ", ".join(project.technologies),
+        })
 
     # ---- 5. The rest, section by section, so nothing from the resume is lost
-    for s in sections:
+    for number, s in enumerate(sections):
         start = s.heading_line if s.heading_line is not None else s.start
         body = [lines[i] for i in range(s.start, s.end) if i not in used and lines[i].strip()]
         if len("\n".join(body).strip()) < 20:
@@ -252,6 +270,8 @@ def build_chunks(
         rest = "\n".join(([lines[start]] if s.heading_line is not None else []) + body)
         section = _SECTION_CHUNK.get(s.kind, ChunkSection.OTHER)
         label = _SECTION_LABEL.get(s.kind, "Resume (other sections)")
-        add(section, f"Employee {employee_code} | {label}", rest)
+        add(section, f"Employee {employee_code} | {label}", rest, {
+            "entry": f"section-{number}", "entry_type": "section", "entry_name": s.heading or "Header",
+        })
 
     return chunks

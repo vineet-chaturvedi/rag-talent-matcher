@@ -24,6 +24,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, ValidationError
 
 from app.extraction.postprocess import appears_in, normalize_for_match
+from app.extraction.skills import normalize_skill, spellings
 from app.llm.ollama_client import OllamaClient
 
 logger = logging.getLogger(__name__)
@@ -82,28 +83,105 @@ _GENERATED_LINE = re.compile(
 _HIDDEN_LINE = re.compile(r"^(Skills used:|Technologies:)")
 
 
-def build_dossier(profile_lines: list[str], chunks: list[tuple[str, str]], max_chars: int) -> tuple[str, str]:
+def _merge_parts(parts: list[str]) -> str:
     """
-    chunks = [(section, text)] in resume order. Facts from Step 5 first, then chunks until the size limit.
-    Returns (dossier shown to the judge, evidence that quotes are checked against).
+    One entry (a job, a project, a section) from its chunks, in order (small-to-big). Later chunks repeat the
+    entry's header lines and the last lines of the previous chunk (the overlap); both are dropped.
+    """
+    merged = parts[0].splitlines()
+    # The header our code wrote on every part: the first line ("Employee EMP-… | Experience | …") and, if
+    # present, the "Skills used:" / "Technologies:" line right after it.
+    header = merged[:1] + [l for l in merged[1:2] if _HIDDEN_LINE.match(l)]
+    for part in parts[1:]:
+        lines = part.splitlines()
+        while lines and header and lines[0] in header:
+            lines = lines[1:]
+        overlap = 0
+        for k in range(min(len(lines), len(merged), 12), 0, -1):    # longest repeated run of lines
+            if merged[-k:] == lines[:k]:
+                overlap = k
+                break
+        merged.extend(lines[overlap:])
+    return "\n".join(merged)
 
-    The profile card (section "summary") is LEFT OUT: it is written from Step 5's LLM output, and in the
-    first real run the judge quoted its paraphrases ("Adept in Java, Spring Boot, Kafka...") instead of the
-    resume, so those quotes could never be verified. Chunk headers and "Skills used:" lines (written by our
-    code) stay visible as orientation, but are not evidence.
+
+def assemble_entries(chunks: list[tuple]) -> list[tuple[str, str, str]]:
     """
-    dossier = "\n".join(profile_lines)
-    evidence: list[str] = []
-    for section, chunk in chunks:
+    chunks = [(section, text)] or [(section, text, meta)] in resume order -> [(entry key, section, text)].
+    Chunks with the same meta["entry"] (the parts of one job or project) become ONE entry. Chunks without
+    meta (indexed before Step 13b part 3) stay one entry each, as before.
+    """
+    entries: dict[str, list] = {}
+    order: list[str] = []
+    for i, chunk in enumerate(chunks):
+        section, text = chunk[0], chunk[1]
+        meta = chunk[2] if len(chunk) > 2 and chunk[2] else {}
+        key = meta.get("entry") or f"chunk-{i}"
+        if key not in entries:
+            entries[key] = [section, []]
+            order.append(key)
+        entries[key][1].append(text)
+    return [(key, entries[key][0], _merge_parts(entries[key][1])) for key in order]
+
+
+def _relevance(text: str, terms: list[str], strong: set[str]) -> int:
+    """How many of the role's skills an entry mentions: must-haves count 2, nice-to-haves 1."""
+    norm = normalize_for_match(text)
+    score = 0
+    for term in terms:
+        for spelling in normalize_skill(term)[:1] and spellings(normalize_skill(term)[0]) or [term]:
+            t = normalize_for_match(spelling)
+            if t and re.search(rf"(?<![a-z0-9]){re.escape(t)}(?![a-z0-9])", norm):
+                score += 2 if term in strong else 1
+                break
+    return score
+
+
+def build_dossier(profile_lines: list[str], chunks: list[tuple], max_chars: int,
+                  must_terms: list[str] | None = None, nice_terms: list[str] | None = None) -> tuple[str, str]:
+    """
+    chunks = [(section, text[, meta])] in resume order. Facts from Step 5 first, then whole entries (jobs,
+    projects, sections) until the size limit. Returns (dossier shown to the judge, evidence for quotes).
+
+    Small-to-big (2026-11-06): the chunks of one job or project are joined back into the whole entry, so the
+    judge reads a long job as one piece. When everything doesn't fit, the entries that mention the role's
+    skills most are chosen first (then shown in resume order). Before, chunks were added in resume order until
+    the limit, so on a long resume the projects at the end were cut off however relevant they were.
+
+    The profile card (section "summary") is LEFT OUT: it is written from extracted data, and in the first real
+    run the judge quoted its paraphrases instead of the resume, so those quotes could never be verified.
+    Chunk headers stay visible as orientation, but are never evidence (_GENERATED_LINE).
+    """
+    entries = []
+    for key, section, text in assemble_entries(chunks):
         if section == "summary":
             continue
         # Chunk headers say "Employee EMP-1003 | ..." - the judge must not see who it is.
-        clean = re.sub(r"Employee [A-Z]+-\d+ \| ", "", chunk)
-        # Drop the "Skills used:" line our code adds for search (Step 7): in the second real run the judge
-        # kept quoting it ("Skills used: Python, FastAPI...") instead of the resume, so Kavya got 3/8 verified.
+        clean = re.sub(r"Employee [A-Z]+-\d+ \| ", "", text)
+        # Lines our code writes for search (Step 7): the judge quoted them instead of the resume.
         clean = "\n".join(l for l in clean.splitlines() if not _HIDDEN_LINE.match(l))
-        if len(dossier) + len(clean) + 2 > max_chars:
-            break
+        entries.append((key, clean))
+
+    must_terms, nice_terms = must_terms or [], nice_terms or []
+    budget = max_chars - len("\n".join(profile_lines))
+    chosen: set[str] = set()
+    if sum(len(c) + 2 for _, c in entries) <= budget:
+        chosen = {k for k, _ in entries}
+    else:
+        strong = set(must_terms)
+        ranked = sorted(enumerate(entries),
+                        key=lambda pair: (-_relevance(pair[1][1], must_terms + nice_terms, strong), pair[0]))
+        used = 0
+        for _, (key, clean) in ranked:
+            if used + len(clean) + 2 <= budget:
+                chosen.add(key)
+                used += len(clean) + 2
+
+    dossier = "\n".join(profile_lines)
+    evidence: list[str] = []
+    for key, clean in entries:                       # chosen entries, in resume order
+        if key not in chosen:
+            continue
         dossier += "\n\n" + clean
         evidence.append("\n".join(l for l in clean.splitlines() if not _GENERATED_LINE.match(l)))
     return dossier, "\n".join(evidence)

@@ -24,3 +24,6 @@ chromadb>=1.0                # embedded vector store, saved to data/chroma
 # Authentication (Step 9)
 pwdlib[argon2]>=0.2          # password hashing with Argon2id (FastAPI's recommended library)
 PyJWT>=2.9                   # signed login tokens (JSON Web Tokens)
+
+# Optional: the cross-encoder reranker (RERANK_MODEL in .env, app/rag/reranker.py). ONNX, no PyTorch.
+# pip install fastembed

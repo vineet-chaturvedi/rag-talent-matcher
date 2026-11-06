@@ -91,22 +91,31 @@ async def create_match_run(session: AsyncSession, ollama: OllamaClient, settings
 
 
 # --------------------------------------------------------------------------- part 2: background judging
-async def _dossier_for(session: AsyncSession, resume_id: int, max_chars: int) -> tuple[str, str]:
+async def _dossier_for(session: AsyncSession, resume_id: int, max_chars: int,
+                       requirements: dict | None = None) -> tuple[str, str]:
     resume = await session.get(Resume, resume_id, options=[selectinload(Resume.profile),
                                                             selectinload(Resume.experiences)])
     chunks = (await session.execute(
-        select(ResumeChunk.section, ResumeChunk.text).where(ResumeChunk.resume_id == resume_id)
+        select(ResumeChunk.section, ResumeChunk.text, ResumeChunk.meta).where(ResumeChunk.resume_id == resume_id)
         .order_by(ResumeChunk.chunk_index)
     )).all()
     lines = []
     if resume.profile and resume.profile.total_experience_years is not None:
-        lines.append(f"Total experience (calculated from job dates): {resume.profile.total_experience_years} years")
+        basis = (resume.profile.raw_extraction or {}).get("experience_basis")
+        how = "as stated in the resume, which has no dated jobs" if basis == "stated in resume" \
+            else "calculated from job dates"
+        lines.append(f"Total experience ({how}): {resume.profile.total_experience_years} years")
     jobs = sorted(resume.experiences, key=lambda e: e.start_date.isoformat() if e.start_date else "", reverse=True)
     if jobs:
         lines.append("Jobs: " + "; ".join(
             f"{j.title or 'Role'} ({j.start_date.year if j.start_date else '?'} - "
             f"{'present' if j.is_current else (j.end_date.year if j.end_date else '?')})" for j in jobs))
-    return build_dossier(lines, [(str(sec), text) for sec, text in chunks], max_chars)
+    requirements = requirements or {}
+    return build_dossier(
+        lines, [(str(sec), text, meta) for sec, text, meta in chunks], max_chars,
+        must_terms=[s["name"] for s in requirements.get("must_have", [])],
+        nice_terms=[s["name"] for s in requirements.get("nice_to_have", [])],
+    )
 
 
 async def judge_run(run_id: int, ollama: OllamaClient, settings: Settings) -> None:
@@ -121,7 +130,8 @@ async def judge_run(run_id: int, ollama: OllamaClient, settings: Settings) -> No
                 if result.explanation.get("judge_status") != "pending":
                     continue
                 explanation = dict(result.explanation)        # a NEW dict, so SQLAlchemy sees the JSON change
-                dossier, evidence = await _dossier_for(session, result.resume_id, settings.judge_max_dossier_chars)
+                dossier, evidence = await _dossier_for(session, result.resume_id, settings.judge_max_dossier_chars,
+                                                       requirements)
                 try:
                     verdict = await judge_candidate(
                         ollama, settings.judge_model, settings.llm_num_ctx, settings.judge_max_output_tokens,

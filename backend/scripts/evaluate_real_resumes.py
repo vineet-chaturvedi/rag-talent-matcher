@@ -122,7 +122,7 @@ async def main() -> int:
     ollama = None
     if not args.offline:
         from app.llm.ollama_client import OllamaClient
-        ollama = OllamaClient(settings.ollama_base_url, timeout=settings.ollama_timeout_seconds)
+        ollama = OllamaClient(settings.ollama_base_url, settings.ollama_timeout_seconds)
 
     passed = failed = 0
     try:

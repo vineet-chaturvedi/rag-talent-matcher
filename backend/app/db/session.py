@@ -49,6 +49,7 @@ ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("resume_skills", "source", "VARCHAR(20)"),
     ("resume_skills", "years_basis", "VARCHAR(20)"),    # evidence ladder (doc 09, 13.6)
     ("resume_skills", "level", "VARCHAR(10)"),
+    ("resume_chunks", "meta", "JSON"),                  # chunk metadata: entry, role, technologies
 ]
 
 

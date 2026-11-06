@@ -10,6 +10,10 @@ then merge their rankings with Reciprocal Rank Fusion (RRF).
                         │
                         ▼
         RRF: score = Σ weight / (k + rank in each list)  → one ranked candidate list
+                        │  (optional, RERANK_MODEL set)
+                        ▼
+            ④ RERANK   a cross-encoder reads the role summary WITH each shortlisted person's best chunks,
+                        their best score is a 4th ranking; RRF again with all four   (app/rag/reranker.py)
 
 Each signal covers another's blind spot (see the Step 6 findings): skills know "k8s" = Kubernetes and
 count years; keywords catch exact rare terms; vectors catch meaning ("design systems" ≈ "component
@@ -30,15 +34,17 @@ from sqlalchemy.orm import selectinload
 
 from app.config import Settings
 from app.db.enums import AvailabilityStatus, ResumeStatus
-from app.db.models import Employee, ProjectRole, Resume, ResumeSkill
+from app.db.enums import ChunkSection
+from app.db.models import Employee, ProjectRole, Resume, ResumeChunk, ResumeSkill
 from app.extraction.skills import implied_by
 from app.llm.ollama_client import OllamaClient
 from app.matching.requirements import ground_in_description, normalise_skill_sections, search_terms, vector_query
 from app.rag.embeddings import embed_query
 from app.rag.keyword_index import keyword_search
+from app.rag.reranker import rerank_scores
 from app.rag.vector_store import ChunkHit, get_vector_store
 
-SIGNALS = ("skills", "keyword", "vector")
+SIGNALS = ("skills", "keyword", "vector", "rerank")     # "rerank" only runs when RERANK_MODEL is set
 
 
 # --------------------------------------------------------------------------- result shapes
@@ -78,6 +84,7 @@ class Candidate:
     nice_matched: list[SkillMatch] = field(default_factory=list)
     keyword_snippets: list[str] = field(default_factory=list)
     vector_chunks: list[ChunkHit] = field(default_factory=list)
+    rerank_score: float | None = None       # best cross-encoder score of this person's chunks (signal ④)
     availability: Availability | None = None
 
 
@@ -235,6 +242,43 @@ def reciprocal_rank_fusion(rankings: dict[str, list[int]], weights: dict[str, fl
 
 
 # --------------------------------------------------------------------------- the whole pipeline
+def _term_hits(text: str, terms: list[str]) -> int:
+    low = text.lower()
+    return sum(1 for t in terms if t and t.lower() in low)
+
+
+async def _rerank(session: AsyncSession, settings: Settings, candidates: dict[int, Candidate],
+                  shortlist: list[int], requirements: dict) -> list[int]:
+    """Signal ④: employee ids ordered by their best cross-encoder score. [] when reranking is unavailable."""
+    resume_to_emp = {candidates[e].resume_id: e for e in shortlist}
+    rows = (await session.execute(
+        select(ResumeChunk.resume_id, ResumeChunk.text)
+        .where(ResumeChunk.resume_id.in_(list(resume_to_emp)), ResumeChunk.section != ChunkSection.SUMMARY)
+        .order_by(ResumeChunk.resume_id, ResumeChunk.chunk_index)
+    )).all()
+    terms = [s["name"] for s in requirements.get("must_have", []) + requirements.get("nice_to_have", [])]
+    by_emp: dict[int, list[str]] = {}
+    for resume_id, text in rows:
+        by_emp.setdefault(resume_to_emp[resume_id], []).append(text)
+    pairs: list[tuple[int, str]] = []
+    for emp, texts in by_emp.items():
+        # A person's chunks that mention the role's skills most (the cross-encoder costs time per chunk).
+        best = sorted(texts, key=lambda t: -_term_hits(t, terms))[: settings.rerank_chunks_per_person]
+        pairs.extend((emp, t) for t in best)
+    if not pairs:
+        return []
+    scores = await asyncio.to_thread(rerank_scores, vector_query(requirements), [t for _, t in pairs],
+                                     settings.rerank_model, settings.models_dir)
+    if scores is None:
+        return []
+    best_score: dict[int, float] = {}
+    for (emp, _), score in zip(pairs, scores):
+        best_score[emp] = max(best_score.get(emp, float("-inf")), score)
+    for emp, score in best_score.items():
+        candidates[emp].rerank_score = round(score, 4)
+    return [emp for emp, _ in sorted(best_score.items(), key=lambda pair: -pair[1])]
+
+
 async def retrieve_candidates(
     session: AsyncSession, ollama: OllamaClient, settings: Settings, role: ProjectRole,
     top_k: int = 15, only_available: bool = False, signals: tuple[str, ...] = SIGNALS,
@@ -308,8 +352,18 @@ async def retrieve_candidates(
 
     # Fusion
     weights = {"skills": settings.rrf_weight_skills, "keyword": settings.rrf_weight_keyword,
-               "vector": settings.rrf_weight_vector}
+               "vector": settings.rrf_weight_vector, "rerank": settings.rrf_weight_rerank}
     fused = reciprocal_rank_fusion(rankings, weights, settings.rrf_k)
+
+    # ④ Rerank (optional): the shortlist's best chunks, read together with the role by a cross-encoder.
+    t_rerank = time.perf_counter()
+    if "rerank" in signals and settings.rerank_model and fused:
+        shortlist = [emp for emp, _ in sorted(fused.items(), key=lambda pair: -pair[1])][: settings.rerank_pool]
+        order = await _rerank(session, settings, candidates, shortlist, requirements)
+        if order:
+            rankings["rerank"] = order
+            fused = reciprocal_rank_fusion(rankings, weights, settings.rrf_k)
+    t_rerank_end = time.perf_counter()
     for signal, ids in rankings.items():
         for rank, emp_id in enumerate(ids, start=1):
             candidates[emp_id].ranks[signal] = rank
@@ -319,7 +373,8 @@ async def retrieve_candidates(
     ranked = sorted((c for c in candidates.values() if c.fused_score > 0), key=lambda c: -c.fused_score)
     timings.update({
         "skills_ms": round((t1 - t0) * 1000), "keyword_ms": round((t2 - t1) * 1000),
-        "vector_ms": round((t3 - t2) * 1000), "total_ms": round((time.perf_counter() - t0) * 1000),
+        "vector_ms": round((t3 - t2) * 1000), "rerank_ms": round((t_rerank_end - t_rerank) * 1000),
+        "total_ms": round((time.perf_counter() - t0) * 1000),
         "found_by": {s: len(ids) for s, ids in rankings.items()},
     })
     return ranked[:top_k], timings
