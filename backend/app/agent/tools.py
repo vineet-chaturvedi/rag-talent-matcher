@@ -13,7 +13,7 @@ recommend, but it cannot upload, delete or change anything ("least privilege").
 import json
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 
 from pydantic import BaseModel, Field, ValidationError
@@ -161,7 +161,13 @@ async def find_candidates(ctx: ToolContext, a: FindCandidatesArgs) -> dict:
         .join(ResumeProfile, ResumeProfile.resume_id == Resume.id)
         .where(Resume.id.in_([c.resume_id for c in kept]))
     )).all()) if kept else {}
-    scored = score_candidates(kept, role, requirements, years, ctx.settings.score_weights)[:a.top_k]
+    # "Relevance" (the position in the keyword + meaning search) only means something when the request describes
+    # the work. For a bare skill list the search text is just "Experience with Python", so its order is noise,
+    # and it let 5.3 years of Python outrank 9.3 years. Then the skills alone decide (times the HR factors).
+    weights = ctx.settings.score_weights
+    if not a.description.strip():
+        weights = replace(weights, skills_share=1.0)
+    scored = score_candidates(kept, role, requirements, years, weights)[:a.top_k]
 
     rows = []
     for c, b in scored:

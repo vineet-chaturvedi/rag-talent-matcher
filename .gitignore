@@ -16,3 +16,6 @@ samples/real/
 
 # ---- Files moved aside instead of deleted ----
 _to_delete/
+
+# ---- Evaluation reports (Step 14): contain answers about real employees; keep locally ----
+backend/evaluation/reports/
