@@ -1,4 +1,4 @@
-import type { AgentMessage } from "@/lib/api/types";
+import type { AgentMessage, MyFeedback } from "@/lib/api/types";
 
 /**
  * One question and everything the agent did for it: the tool steps, then the answer.
@@ -20,6 +20,9 @@ export type Turn = {
   status: "streaming" | "done" | "error" | "stopped";
   error?: string;
   seconds?: number;
+  /** The saved answer message (for 👍 / 👎) and my rating of it (Step 14c). */
+  messageId?: number;
+  feedback?: MyFeedback | null;
 };
 
 /**
@@ -48,6 +51,8 @@ export function messagesToTurns(messages: readonly AgentMessage[]): Turn[] {
       }
     } else if (m.role === "assistant") {
       current.answer = m.content;
+      current.messageId = m.id;
+      current.feedback = m.feedback ?? null;
     }
   }
   // A question without a saved answer: the stream was interrupted (page closed, server restarted).

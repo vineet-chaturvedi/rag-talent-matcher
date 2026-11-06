@@ -76,7 +76,13 @@ export function Chat({ conversationId, initialTurns }: { conversationId: number 
           return { ...turn, answer: turn.answer + event.text };
         case "answer":
           setAnnouncement("The answer is ready.");
-          return { ...turn, answer: event.text || turn.answer, status: "done", seconds: event.seconds };
+          return {
+            ...turn,
+            answer: event.text || turn.answer,
+            status: "done",
+            seconds: event.seconds,
+            messageId: event.message_id ?? undefined,
+          };
         case "error":
           setAnnouncement("The assistant could not answer.");
           return { ...turn, status: "error", error: event.message };

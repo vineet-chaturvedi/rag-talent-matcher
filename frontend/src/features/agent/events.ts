@@ -6,14 +6,23 @@
  *   data: {"type": "tool_call",   "name": "find_candidates", "arguments": {...}}
  *   data: {"type": "tool_result", "name": "find_candidates", "ok": true, "summary": "5 found: EMP-1003, ..."}
  *   data: {"type": "token",       "text": "Priya"}
- *   data: {"type": "answer",      "text": "...", "steps": 2, "tool_calls": 1, "seconds": 74.1}
+ *   data: {"type": "answer",      "text": "...", "steps": 2, "tool_calls": 1, "seconds": 74.1, "message_id": 812}
  *   data: {"type": "error",       "message": "Cannot connect to Ollama"}
  */
 export type AgentEvent =
   | { type: "tool_call"; name: string; arguments: Record<string, unknown> }
   | { type: "tool_result"; name: string; ok: boolean; summary: string }
   | { type: "token"; text: string }
-  | { type: "answer"; text: string; steps?: number; tool_calls?: number; seconds?: number; done_reason?: string }
+  | {
+      type: "answer";
+      text: string;
+      steps?: number;
+      tool_calls?: number;
+      seconds?: number;
+      done_reason?: string;
+      /** The saved answer: lets the person rate it right away (Step 14c). */
+      message_id?: number | null;
+    }
   | { type: "error"; message: string };
 
 const KNOWN = new Set(["tool_call", "tool_result", "token", "answer", "error"]);

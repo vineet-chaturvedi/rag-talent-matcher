@@ -7,7 +7,7 @@ import type { UserRole } from "@/lib/api/types";
  * is passed from Server Components to the (client) NavLinks component, and only plain data can cross
  * that boundary. NavLinks maps the name to the actual icon.
  */
-export type NavIcon = "dashboard" | "assistant" | "projects" | "employees" | "resumes" | "users";
+export type NavIcon = "dashboard" | "assistant" | "projects" | "employees" | "resumes" | "feedback" | "users";
 
 export type NavItem = {
   href: Route;
@@ -25,6 +25,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { href: "/projects", label: "Projects & matching", icon: "projects", also: ["/roles", "/match-runs"] },
   { href: "/employees", label: "Employees", icon: "employees" },
   { href: "/resumes", label: "Resumes", icon: "resumes", roles: ["admin"] },
+  { href: "/feedback", label: "Feedback", icon: "feedback", roles: ["admin"] },
   { href: "/users", label: "Users", icon: "users", roles: ["admin"] },
 ];
 

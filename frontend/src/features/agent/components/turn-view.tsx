@@ -1,6 +1,7 @@
 import { CircleCheck, CircleX, LoaderCircle, Wrench } from "lucide-react";
 
 import { Alert } from "@/components/ui/alert";
+import { FeedbackButtons } from "@/features/feedback/components/feedback-buttons";
 import { cn } from "@/lib/utils";
 
 import { toolLabel } from "../events";
@@ -71,6 +72,9 @@ export function TurnView({ turn }: { turn: Turn }) {
           <p className="text-xs text-muted-foreground">
             {turn.steps.length} {turn.steps.length === 1 ? "step" : "steps"} · {turn.seconds} s
           </p>
+        )}
+        {turn.status === "done" && turn.messageId !== undefined && (
+          <FeedbackButtons target="agent" id={turn.messageId} initial={turn.feedback} className="border-t pt-2" />
         )}
       </div>
     </article>

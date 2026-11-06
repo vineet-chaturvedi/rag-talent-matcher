@@ -8,10 +8,12 @@ describe("navItemsFor", () => {
   it("shows admin-only pages to admins", () => {
     expect(labels(navItemsFor("admin"))).toContain("Users");
     expect(labels(navItemsFor("admin"))).toContain("Resumes");
+    expect(labels(navItemsFor("admin"))).toContain("Feedback");
   });
 
   it("hides them from resource managers", () => {
     expect(labels(navItemsFor("resource_manager"))).not.toContain("Users");
+    expect(labels(navItemsFor("resource_manager"))).not.toContain("Feedback");
     expect(labels(navItemsFor("resource_manager"))).toContain("Projects & matching");
   });
 

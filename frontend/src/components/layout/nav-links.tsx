@@ -1,6 +1,15 @@
 "use client";
 
-import { Bot, FileText, FolderKanban, LayoutDashboard, type LucideIcon, ShieldCheck, Users } from "lucide-react";
+import {
+  Bot,
+  FileText,
+  FolderKanban,
+  LayoutDashboard,
+  type LucideIcon,
+  MessageSquareText,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -14,6 +23,7 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   projects: FolderKanban,
   employees: Users,
   resumes: FileText,
+  feedback: MessageSquareText,
   users: ShieldCheck,
 };
 

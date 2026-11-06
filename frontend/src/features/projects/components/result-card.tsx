@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { FeedbackButtons } from "@/features/feedback/components/feedback-buttons";
 import type { MatchResult, SkillMatch } from "@/lib/api/types";
 import { formatDate } from "@/lib/utils";
 
@@ -17,7 +18,8 @@ import { ScoreBar } from "./score-bar";
  *   - availability for this role;
  *   - must-haves: matched (with years and the resume quote) or missing; nice-to-haves;
  *   - the LLM judge's verdict per must-have, with its quote and whether CODE found that quote in the
- *     resume. "Verified" is the whole point: an unverified "yes" was already downgraded to "partly".
+ *     resume. "Verified" is the whole point: an unverified "yes" was already downgraded to "partly";
+ *   - 👍 / 👎 so the people who know the candidates can say whether the ranking is right (Step 14c).
  * Long details sit in <details> elements: native, keyboard-accessible, and no JavaScript needed.
  */
 export function ResultCard({ result, judgeWeight }: { result: MatchResult; judgeWeight: number }) {
@@ -165,6 +167,17 @@ export function ResultCard({ result, judgeWeight }: { result: MatchResult; judge
               ))}
             </ul>
           </details>
+        )}
+
+        {result.result_id != null && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+            <FeedbackButtons target="match" id={result.result_id} initial={result.my_feedback} />
+            {(result.feedback_up > 0 || result.feedback_down > 0) && (
+              <p className="text-xs text-muted-foreground">
+                Team: {result.feedback_up} 👍 · {result.feedback_down} 👎
+              </p>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>

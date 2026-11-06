@@ -49,3 +49,11 @@ export type ScoreBreakdown = Schemas["ScoreBreakdown"];
 export type Conversation = Schemas["ConversationOut"];
 export type ConversationDetail = Schemas["ConversationDetail"];
 export type AgentMessage = Schemas["MessageOut"];
+
+export type MyFeedback = Schemas["MyFeedback"];
+export type FeedbackRating = Schemas["FeedbackRating"];
+export type FeedbackTarget = Schemas["FeedbackTarget"];
+export type FeedbackItem = Schemas["FeedbackItem"];
+export type FeedbackList = Schemas["FeedbackList"];
+export type MatchFeedbackReason = NonNullable<Schemas["MatchFeedbackIn"]["reason"]>;
+export type AgentFeedbackReason = NonNullable<Schemas["AgentFeedbackIn"]["reason"]>;

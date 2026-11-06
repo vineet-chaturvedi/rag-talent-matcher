@@ -635,6 +635,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/match-results/{result_id}/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Rate Match Result */
+        put: operations["rate_match_result_api_match_results__result_id__feedback_put"];
+        post?: never;
+        /** Unrate Match Result */
+        delete: operations["unrate_match_result_api_match_results__result_id__feedback_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent/messages/{message_id}/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Rate Agent Answer */
+        put: operations["rate_agent_answer_api_agent_messages__message_id__feedback_put"];
+        post?: never;
+        /** Unrate Agent Answer */
+        delete: operations["unrate_agent_answer_api_agent_messages__message_id__feedback_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Feedback */
+        get: operations["list_feedback_api_feedback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/dev/chat": {
         parameters: {
             query?: never;
@@ -710,6 +763,14 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AgentFeedbackIn */
+        AgentFeedbackIn: {
+            rating: components["schemas"]["FeedbackRating"];
+            /** Reason */
+            reason?: ("wrong_people" | "missed_someone" | "wrong_numbers" | "misunderstood" | "too_long" | "other") | null;
+            /** Comment */
+            comment?: string | null;
+        };
         /** AskRequest */
         AskRequest: {
             /**
@@ -1098,6 +1159,88 @@ export interface components {
             /** Judge Error */
             judge_error?: string | null;
         };
+        /** FeedbackCounts */
+        FeedbackCounts: {
+            /**
+             * Match Up
+             * @default 0
+             */
+            match_up: number;
+            /**
+             * Match Down
+             * @default 0
+             */
+            match_down: number;
+            /**
+             * Agent Up
+             * @default 0
+             */
+            agent_up: number;
+            /**
+             * Agent Down
+             * @default 0
+             */
+            agent_down: number;
+        };
+        /**
+         * FeedbackItem
+         * @description One rating in the admin list, with enough context to understand it.
+         */
+        FeedbackItem: {
+            /** Id */
+            id: number;
+            target: components["schemas"]["FeedbackTarget"];
+            rating: components["schemas"]["FeedbackRating"];
+            /** Reason */
+            reason: string | null;
+            /** Comment */
+            comment: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** User Name */
+            user_name: string;
+            /** Match Run Id */
+            match_run_id?: number | null;
+            /** Role Id */
+            role_id?: number | null;
+            /** Role Title */
+            role_title?: string | null;
+            /** Employee Id */
+            employee_id?: number | null;
+            /** Employee Code */
+            employee_code?: string | null;
+            /** Employee Name */
+            employee_name?: string | null;
+            /** Context */
+            context?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** FeedbackList */
+        FeedbackList: {
+            counts: components["schemas"]["FeedbackCounts"];
+            /** Items */
+            items: components["schemas"]["FeedbackItem"][];
+        };
+        /**
+         * FeedbackRating
+         * @enum {string}
+         */
+        FeedbackRating: "up" | "down";
+        /**
+         * FeedbackTarget
+         * @description What a person rated (Step 14c).
+         * @enum {string}
+         */
+        FeedbackTarget: "match_result" | "agent_answer";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1183,6 +1326,14 @@ export interface components {
             /** Password */
             password: string;
         };
+        /** MatchFeedbackIn */
+        MatchFeedbackIn: {
+            rating: components["schemas"]["FeedbackRating"];
+            /** Reason */
+            reason?: ("missing_skill" | "too_little_experience" | "not_available" | "profile_wrong" | "should_rank_higher" | "should_rank_lower" | "other") | null;
+            /** Comment */
+            comment?: string | null;
+        };
         /** MatchRequest */
         MatchRequest: {
             /**
@@ -1206,6 +1357,8 @@ export interface components {
         };
         /** MatchResultOut */
         MatchResultOut: {
+            /** Result Id */
+            result_id?: number | null;
             /** Rank */
             rank: number;
             /** Employee Id */
@@ -1222,6 +1375,17 @@ export interface components {
             final_score: number;
             score_breakdown: components["schemas"]["ScoreBreakdown"];
             explanation: components["schemas"]["Explanation"];
+            my_feedback?: components["schemas"]["MyFeedback"] | null;
+            /**
+             * Feedback Up
+             * @default 0
+             */
+            feedback_up: number;
+            /**
+             * Feedback Down
+             * @default 0
+             */
+            feedback_down: number;
         };
         /** MatchRunCounts */
         MatchRunCounts: {
@@ -1347,6 +1511,7 @@ export interface components {
             created_at: string;
             /** Summary */
             summary?: string | null;
+            feedback?: components["schemas"]["MyFeedback"] | null;
         };
         /** ModelHealth */
         ModelHealth: {
@@ -1375,6 +1540,17 @@ export interface components {
             verified: boolean;
             /** Note */
             note?: string | null;
+        };
+        /**
+         * MyFeedback
+         * @description The signed-in person's own rating of one item (shown as the pressed thumb).
+         */
+        MyFeedback: {
+            rating: components["schemas"]["FeedbackRating"];
+            /** Reason */
+            reason?: string | null;
+            /** Comment */
+            comment?: string | null;
         };
         /** OllamaHealth */
         OllamaHealth: {
@@ -3384,6 +3560,168 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AskResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rate_match_result_api_match_results__result_id__feedback_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                result_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MatchFeedbackIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyFeedback"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unrate_match_result_api_match_results__result_id__feedback_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                result_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rate_agent_answer_api_agent_messages__message_id__feedback_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentFeedbackIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyFeedback"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unrate_agent_answer_api_agent_messages__message_id__feedback_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                message_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_feedback_api_feedback_get: {
+        parameters: {
+            query?: {
+                target?: components["schemas"]["FeedbackTarget"] | null;
+                rating?: components["schemas"]["FeedbackRating"] | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackList"];
                 };
             };
             /** @description Validation Error */
