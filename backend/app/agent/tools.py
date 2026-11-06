@@ -128,13 +128,27 @@ async def find_candidates(ctx: ToolContext, a: FindCandidatesArgs) -> dict:
             "employee_code": c.employee.employee_code, "name": c.employee.full_name,
             "designation": c.employee.designation, "location": c.employee.location,
             "score": b["rule_score"], "total_years": b["total_years"],
-            "matched": [f"{m.required} (via {m.matched_with}" + (f", {m.years} y" if m.years else "")
-                        + (f", last used {m.last_used_year})" if m.last_used_year else ")") for m in c.must_matched],
+            "matched": [_match_text(m) for m in c.must_matched],
             "missing": c.must_missing,
             "nice_matched": [m.required for m in c.nice_matched],
             "availability": c.availability.note,
         } for c, b in scored],
     }
+
+
+def _match_text(m) -> str:
+    """'Kubernetes (via Amazon EKS, 3.2 y, last used 2026)' · 'React Native (5.0 y estimated)' · 'Twilio (2 projects)'"""
+    how = {"estimated": " estimated", "stated": " as stated", "projects": " from project durations"}.get(m.years_basis or "", "")
+    parts = [] if m.direct else [f"via {m.matched_with}"]
+    if m.years:
+        parts.append(f"{m.years} y{how}")
+    elif m.uses:
+        parts.append(f"{m.uses} project{'s' if m.uses > 1 else ''}")
+    else:
+        parts.append("listed only")
+    if m.last_used_year:
+        parts.append(f"last used {m.last_used_year}")
+    return f"{m.required} ({', '.join(parts)})"
 
 
 async def _employee(ctx: ToolContext, code: str) -> Employee | None:

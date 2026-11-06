@@ -60,8 +60,9 @@ Rules:
    exactly as listed, without the years.
    "met": "yes" = clearly shown in real work; "partly" = related or only listed; "no" = not shown.
    "quote": the exact words from <candidate> that prove it (at most 15 words), or null if "no".
-   Copy quotes from the resume's own sentences and bullet points, NOT from the "Total experience"
-   or "Jobs" lines (those were written by software, not the person).
+   Copy quotes from the resume's own sentences and bullet points, NOT from the "Total experience",
+   "Jobs", "Experience |" or "Project: ... | Role: ..." lines (those were written by software, not the person).
+   A project's own bullet points are real work, just like a job's.
 3. "strengths": up to 3 things that make this person a good fit, each with an exact quote (at most 15 words).
 4. "gaps": up to 3 missing or weak points for THIS role (short phrases).
 5. "rating": strong / good / partial / weak, for the role as a whole.
@@ -70,8 +71,15 @@ Rules:
    about the person that is not about the work."""
 
 
-# Lines our own code added to chunks (Steps 6-7): headers and the "Skills used:" line. Not resume text.
-_GENERATED_LINE = re.compile(r"^(Experience \||Resume \(other sections\)|Profile$|Skills used:)")
+# Lines our own code wrote into chunks (Steps 6-7, 13b): headers and skill/technology lists. Not resume text,
+# so never evidence. Version 1 missed the project headers added in Step 13b ("Project: X | Role: ...",
+# "Technologies: ..."): a quote from them would have counted as proof (found 2026-11-06).
+_GENERATED_LINE = re.compile(
+    r"^(Experience \||Project: |Resume \(other sections\)$|Profile$|Skills$|Education$|Certifications$|"
+    r"Skills used:|Technologies:)"
+)
+# Generated lines the judge doesn't even see: in real runs it quoted them instead of the resume (Step 8).
+_HIDDEN_LINE = re.compile(r"^(Skills used:|Technologies:)")
 
 
 def build_dossier(profile_lines: list[str], chunks: list[tuple[str, str]], max_chars: int) -> tuple[str, str]:
@@ -93,7 +101,7 @@ def build_dossier(profile_lines: list[str], chunks: list[tuple[str, str]], max_c
         clean = re.sub(r"Employee [A-Z]+-\d+ \| ", "", chunk)
         # Drop the "Skills used:" line our code adds for search (Step 7): in the second real run the judge
         # kept quoting it ("Skills used: Python, FastAPI...") instead of the resume, so Kavya got 3/8 verified.
-        clean = "\n".join(l for l in clean.splitlines() if not l.startswith("Skills used:"))
+        clean = "\n".join(l for l in clean.splitlines() if not _HIDDEN_LINE.match(l))
         if len(dossier) + len(clean) + 2 > max_chars:
             break
         dossier += "\n\n" + clean

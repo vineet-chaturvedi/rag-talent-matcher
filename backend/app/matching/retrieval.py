@@ -52,6 +52,8 @@ class SkillMatch:
     credit: float                 # 0..1 how well this requirement is covered
     evidence: str | None
     weight: float = 1.0           # rarity of the requirement among eligible people (rare skills count more)
+    years_basis: str | None = None  # jobs / projects / stated / estimated (doc 09, 13.6)
+    uses: int = 0                   # jobs + projects that used the skill
 
 
 @dataclass
@@ -152,7 +154,8 @@ def _best_match(required: str, min_years: float | None, links: list[ResumeSkill]
         credit = _credit(direct, link.years, link.last_used_year, needed, link.uses or 0,
                          link.years_basis, link.source, link.level)
         if best is None or credit > best.credit:
-            best = SkillMatch(required, name, direct, link.years, link.last_used_year, credit, link.evidence)
+            best = SkillMatch(required, name, direct, link.years, link.last_used_year, credit, link.evidence,
+                              years_basis=link.years_basis, uses=link.uses or 0)
     return best
 
 

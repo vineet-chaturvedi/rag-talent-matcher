@@ -212,7 +212,9 @@ function SkillLine({ skill }: { skill: SkillMatch }) {
         {skill.required}
         {!skill.direct && <span className="text-muted-foreground"> (via {skill.matched_with})</span>}
         <span className="text-xs text-muted-foreground">
-          {skill.years != null && ` · ${skill.years} y`}
+          {skill.years != null &&
+            (skill.years_basis === "estimated" ? ` · ≈ ${skill.years} y (estimated)` : ` · ${skill.years} y`)}
+          {skill.years == null && (skill.uses ?? 0) > 0 && ` · ${skill.uses} project${skill.uses === 1 ? "" : "s"}`}
           {skill.last_used_year != null && ` · last ${skill.last_used_year}`}
         </span>
       </span>

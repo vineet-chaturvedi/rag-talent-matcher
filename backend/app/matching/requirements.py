@@ -60,7 +60,9 @@ Rules:
    "Vector Databases"; write "NLP", not "NLP fundamentals".
 4. "min_years": only if the description gives years for that skill, else null.
    "min_total_years": overall years of experience if stated, else null.
-5. "location": the work location if stated, else null. "domain": business domains mentioned (lowercase).
+5. "seniority": junior / mid / senior / lead / principal only if the description uses that word
+   ("staff" counts as principal, "team lead" as lead), else "unspecified". Never infer it from years.
+   "location": the work location if stated, else null. "domain": business domains mentioned (lowercase).
 6. "search_summary": 2-3 sentences describing the ideal person's experience, using the role's own
    key terms. No names."""
 

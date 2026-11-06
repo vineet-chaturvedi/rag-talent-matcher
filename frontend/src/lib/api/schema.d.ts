@@ -2000,6 +2000,13 @@ export interface components {
             evidence: string | null;
             /** Weight */
             weight: number;
+            /** Years Basis */
+            years_basis?: string | null;
+            /**
+             * Uses
+             * @default 0
+             */
+            uses: number;
         };
         /** StrengthOut */
         StrengthOut: {

@@ -107,6 +107,8 @@ class SkillMatchOut(BaseModel):
     credit: float
     evidence: str | None
     weight: float
+    years_basis: str | None = None     # jobs / projects / stated / estimated (absent in runs saved before 13b)
+    uses: int = 0                      # jobs + projects that used the skill
 
 
 class AvailabilityOut(BaseModel):
