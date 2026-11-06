@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.db.enums import AvailabilityStatus, MatchRunStatus
+from app.schemas.feedback import MyFeedback
 from app.schemas.project import Requirements, SkillMatchOut
 
 
@@ -116,6 +117,7 @@ class MatchRunSettings(BaseModel):
 
 
 class MatchResultOut(BaseModel):
+    result_id: int | None = None   # to rate this result (Step 14c)
     rank: int
     employee_id: int
     employee_code: str
@@ -125,6 +127,9 @@ class MatchResultOut(BaseModel):
     final_score: float
     score_breakdown: ScoreBreakdown
     explanation: Explanation
+    my_feedback: MyFeedback | None = None   # the signed-in person's thumbs up / down
+    feedback_up: int = 0                    # everyone's ratings of this result
+    feedback_down: int = 0
 
 
 class MatchRunOut(BaseModel):

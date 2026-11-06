@@ -60,3 +60,14 @@ class MatchRunStatus(StrEnum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+class FeedbackTarget(StrEnum):
+    """What a person rated (Step 14c)."""
+    MATCH_RESULT = "match_result"   # one candidate in a match run
+    AGENT_ANSWER = "agent_answer"   # one answer of the staffing assistant
+
+
+class FeedbackRating(StrEnum):
+    UP = "up"       # right / helpful
+    DOWN = "down"   # wrong / not helpful

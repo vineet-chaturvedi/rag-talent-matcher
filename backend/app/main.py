@@ -8,7 +8,8 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import agent, auth, dev, employees, health, matching, overview, projects, resumes, search, users
+from app.api import (agent, auth, dev, employees, feedback, health, matching, overview, projects, resumes, search,
+                     users)
 from app.auth.dependencies import get_current_user, require_admin
 from app.config import get_settings
 from app.db.session import engine, init_db
@@ -93,6 +94,7 @@ app.include_router(search.router, dependencies=signed_in)
 app.include_router(projects.router, dependencies=signed_in)
 app.include_router(matching.router, dependencies=signed_in)
 app.include_router(agent.router, dependencies=signed_in)
+app.include_router(feedback.router, dependencies=signed_in)   # the admin list checks the role itself
 if settings.is_development:
     app.include_router(dev.router, dependencies=[Depends(require_admin)])
 

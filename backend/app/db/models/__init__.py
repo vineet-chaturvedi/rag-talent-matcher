@@ -5,6 +5,7 @@ silently never get a table.
 """
 from app.db.models.agent import AgentConversation, AgentMessage
 from app.db.models.employee import Employee
+from app.db.models.feedback import Feedback
 from app.db.models.matching import MatchResult, MatchRun
 from app.db.models.project import Project, ProjectRole
 from app.db.models.resume import Experience, Resume, ResumeChunk, ResumeProfile, ResumeProject
@@ -12,6 +13,6 @@ from app.db.models.skill import ResumeSkill, Skill
 from app.db.models.user import User
 
 __all__ = [
-    "AgentConversation", "AgentMessage", "Employee", "Experience", "MatchResult", "MatchRun", "Project", "ProjectRole",
+    "AgentConversation", "AgentMessage", "Employee", "Experience", "Feedback", "MatchResult", "MatchRun", "Project", "ProjectRole",
     "Resume", "ResumeChunk", "ResumeProfile", "ResumeProject", "ResumeSkill", "Skill", "User",
 ]

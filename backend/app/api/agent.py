@@ -8,7 +8,8 @@ The agent's API (Step 10). Every user sees only their own conversations.
          data: {"type": "tool_call", "name": "find_candidates", "arguments": {...}}
          data: {"type": "tool_result", "name": "find_candidates", "ok": true, "summary": "5 found: EMP-1003, ..."}
          data: {"type": "token", "text": "Priya"}          (the answer, piece by piece)
-         data: {"type": "answer", "text": "...", "steps": 2, "seconds": 74.1}
+         data: {"type": "answer", "text": "...", "steps": 2, "seconds": 74.1, "message_id": 812}
+         (message_id: the saved answer, so it can be rated right away, Step 14c)
 """
 import json
 import logging
@@ -24,12 +25,13 @@ from app.agent.tools import ToolContext
 from app.api.deps import get_db, get_ollama
 from app.auth.dependencies import get_current_user
 from app.config import Settings, get_settings
-from app.db.models import AgentConversation, AgentMessage, User
+from app.db.models import AgentConversation, AgentMessage, Feedback, User
 from app.db.session import SessionLocal
 from app.llm.ollama_client import OllamaClient, OllamaError
 from app.schemas.agent import (
     AskRequest, AskResponse, ConversationCreate, ConversationDetail, ConversationOut, MessageOut,
 )
+from app.schemas.feedback import MyFeedback
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/agent", tags=["agent"])
@@ -59,8 +61,11 @@ async def list_conversations(db: AsyncSession = Depends(get_db), user: User = De
                              .order_by(AgentConversation.updated_at.desc(), AgentConversation.id.desc()))).all()
 
 
-def _message_out(m: AgentMessage) -> MessageOut:
+def _message_out(m: AgentMessage, feedback: dict[int, Feedback] | None = None) -> MessageOut:
     out = MessageOut.model_validate(m)
+    fb = (feedback or {}).get(m.id)
+    if fb is not None:
+        out.feedback = MyFeedback(rating=fb.rating, reason=fb.reason, comment=fb.comment)
     if m.role == "tool" and m.tool_name:
         try:
             out.summary = summarise_tool_result(m.tool_name, json.loads(m.content))
@@ -73,9 +78,12 @@ def _message_out(m: AgentMessage) -> MessageOut:
 async def get_conversation(conversation_id: int, db: AsyncSession = Depends(get_db),
                            user: User = Depends(get_current_user)):
     conv = await _own_conversation(db, conversation_id, user, with_messages=True)
+    ids = [m.id for m in conv.messages if m.role == "assistant"]
+    feedback = {fb.agent_message_id: fb for fb in (await db.scalars(
+        select(Feedback).where(Feedback.user_id == user.id, Feedback.agent_message_id.in_(ids)))).all()} if ids else {}
     return ConversationDetail(
         id=conv.id, title=conv.title, created_at=conv.created_at, updated_at=conv.updated_at,
-        messages=[_message_out(m) for m in sorted(conv.messages, key=lambda m: m.id)],
+        messages=[_message_out(m, feedback) for m in sorted(conv.messages, key=lambda m: m.id)],
     )
 
 
@@ -114,9 +122,16 @@ async def ask(conversation_id: int, body: AskRequest, db: AsyncSession = Depends
         async with SessionLocal() as session:
             ctx = ToolContext(session, ollama, settings, await session.get(User, user_id))
             try:
+                answer_id = None
                 async for event in run_agent(ctx, settings.agent_model, history, body.content):
                     if event["type"] == "_save":
-                        session.add(AgentMessage(conversation_id=conv_id, **event["message"]))
+                        saved = AgentMessage(conversation_id=conv_id, **event["message"])
+                        session.add(saved)
+                        if saved.role == "assistant" and not saved.tool_calls:
+                            await session.flush()          # gives the answer its id now
+                            answer_id = saved.id
+                    elif event["type"] == "answer":
+                        yield {**event, "message_id": answer_id}
                     else:
                         yield event
             except OllamaError as exc:

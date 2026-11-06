@@ -14,9 +14,11 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import get_db, get_ollama
 from app.auth.dependencies import get_current_user
 from app.config import Settings, get_settings
-from app.db.models import MatchResult, MatchRun, ProjectRole, User
+from app.db.enums import FeedbackRating
+from app.db.models import Feedback, MatchResult, MatchRun, ProjectRole, User
 from app.llm.ollama_client import OllamaClient, OllamaError
 from app.matching.runner import create_match_run, judge_run
+from app.schemas.feedback import MyFeedback
 from app.schemas.matching import MatchRequest, MatchResultOut, MatchRunOut, MatchRunSummary
 
 router = APIRouter(tags=["match runs"])
@@ -29,7 +31,23 @@ async def _load_run(db: AsyncSession, run_id: int) -> MatchRun | None:
     ])
 
 
-def _to_out(run: MatchRun) -> MatchRunOut:
+async def _feedback(db: AsyncSession, run: MatchRun, user: User | None) -> tuple[dict, dict]:
+    """(my rating per result id, {result id: [up, down]}) for the results of a run."""
+    ids = [r.id for r in run.results]
+    if not ids:
+        return {}, {}
+    rows = (await db.scalars(select(Feedback).where(Feedback.match_result_id.in_(ids)))).all()
+    mine, counts = {}, {}
+    for fb in rows:
+        c = counts.setdefault(fb.match_result_id, [0, 0])
+        c[0 if fb.rating == FeedbackRating.UP else 1] += 1
+        if user is not None and fb.user_id == user.id:
+            mine[fb.match_result_id] = MyFeedback(rating=fb.rating, reason=fb.reason, comment=fb.comment)
+    return mine, counts
+
+
+def _to_out(run: MatchRun, mine: dict | None = None, counts: dict | None = None) -> MatchRunOut:
+    mine, counts = mine or {}, counts or {}
     results = sorted(run.results, key=lambda r: r.rank)
     statuses = [(r.explanation or {}).get("judge_status") for r in results]
     return MatchRunOut(
@@ -39,6 +57,8 @@ def _to_out(run: MatchRun) -> MatchRunOut:
         to_judge=sum(s in ("pending", "done", "failed") for s in statuses),
         settings=run.settings,
         results=[MatchResultOut(
+            result_id=r.id, my_feedback=mine.get(r.id),
+            feedback_up=counts.get(r.id, [0, 0])[0], feedback_down=counts.get(r.id, [0, 0])[1],
             rank=r.rank, employee_id=r.employee_id, employee_code=r.employee.employee_code,
             full_name=r.employee.full_name, designation=r.employee.designation, location=r.employee.location,
             final_score=r.final_score,
@@ -76,11 +96,11 @@ async def start_match(
 
 
 @router.get("/api/match-runs/{run_id}", response_model=MatchRunOut)
-async def get_match_run(run_id: int, db: AsyncSession = Depends(get_db)):
+async def get_match_run(run_id: int, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     run = await _load_run(db, run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Match run not found")
-    return _to_out(run)
+    return _to_out(run, *await _feedback(db, run, user))
 
 
 @router.get("/api/roles/{role_id}/match-runs", response_model=list[MatchRunSummary])

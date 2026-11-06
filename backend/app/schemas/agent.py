@@ -3,6 +3,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.feedback import MyFeedback
+
 
 class ConversationCreate(BaseModel):
     title: str | None = Field(None, max_length=200)
@@ -18,6 +20,7 @@ class MessageOut(BaseModel):
     tool_name: str | None
     created_at: datetime
     summary: str | None = None     # tool messages: the same one-line summary the live stream showed (Step 13)
+    feedback: MyFeedback | None = None   # final answers: my thumbs up / down (Step 14c)
 
 
 class ConversationOut(BaseModel):
