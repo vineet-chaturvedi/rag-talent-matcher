@@ -6,6 +6,7 @@ Resume endpoints:
   GET    /api/resumes/stats            queue overview for the admin dashboard
   GET    /api/resumes/{id}             details + extracted text
   GET    /api/resumes/{id}/profile     the structured profile extracted by the LLM (Step 5)
+  GET    /api/resumes/{id}/file        the original uploaded file (admins; ?download=true to save it)
   POST   /api/resumes/{id}/retry       re-queue a failed resume
   POST   /api/resumes/reextract        send all resumes back to LLM extraction (after a model/prompt change)
   POST   /api/resumes/reembed          rebuild all chunks + vectors (after a chunking/embedding change)
@@ -13,8 +14,10 @@ Resume endpoints:
 """
 import asyncio
 from datetime import date
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -179,6 +182,34 @@ async def get_resume(resume_id: int, full_text: bool = False, db: AsyncSession =
         employee_name=resume.employee.full_name,
         text_length=len(text),
         text=(text if full_text else text[:PREVIEW_CHARS]) or None,
+    )
+
+
+@router.get("/api/resumes/{resume_id}/file", dependencies=[Depends(require_admin)],
+            response_class=FileResponse, responses={200: {"content": {"application/pdf": {}}}})
+async def get_resume_file(resume_id: int, download: bool = False, db: AsyncSession = Depends(get_db),
+                          settings: Settings = Depends(get_settings)):
+    """
+    The original file, exactly as uploaded (every version is kept, not only the current one).
+    Admins only: the original holds the contact details that the profile, the search index and the agent
+    leave out. PDFs open in the browser (inline); Word files are always downloaded, because browsers can't
+    show them. ?download=true downloads a PDF too.
+    """
+    resume = await db.get(Resume, resume_id)
+    if resume is None:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    upload_root = Path(settings.upload_dir).resolve()
+    path = Path(resume.stored_path).resolve()
+    # The path comes from our own database, but check anyway that it points inside the upload folder.
+    if not path.is_relative_to(upload_root) or not path.is_file():
+        raise HTTPException(status_code=404, detail="The file of this resume is missing from the upload folder.")
+    inline = resume.mime_type == "application/pdf" and not download
+    return FileResponse(
+        path,
+        media_type=resume.mime_type,
+        filename=resume.original_filename,          # the name the admin uploaded, not our storage name
+        content_disposition_type="inline" if inline else "attachment",
+        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
     )
 
 

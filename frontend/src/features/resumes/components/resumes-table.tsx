@@ -15,6 +15,7 @@ import { formatBytes, formatDateTime, plural } from "@/lib/utils";
 import { deleteResume, retryResume } from "../actions";
 import { isInProgress, STATUS_LABEL } from "../labels";
 import { listResumes, RESUMES_PAGE_SIZE } from "../queries";
+import { ResumeFileLinks } from "./resume-file-links";
 import { ResumeStatusBadge } from "./resume-status-badge";
 
 /** The admin list of current resumes: who, which file, where in the pipeline, what went wrong. */
@@ -68,7 +69,7 @@ export async function ResumesTable({ status, page }: { status?: ResumeStatus; pa
                 </span>
               </TableCell>
               <TableCell className="max-w-72">
-                <ResumeStatusBadge status={resume.status} />
+                <ResumeStatusBadge status={resume.status} isCurrent={resume.is_current} />
                 {resume.error_message && (
                   <span className="mt-1 block text-xs text-destructive">{resume.error_message}</span>
                 )}
@@ -81,6 +82,7 @@ export async function ResumesTable({ status, page }: { status?: ResumeStatus; pa
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex justify-end gap-2">
+                  <ResumeFileLinks resume={resume} />
                   {resume.status === "failed" && (
                     <ActionButton action={retryResume.bind(null, resume.id)} label="Retry" pendingLabel="Retrying…" />
                   )}

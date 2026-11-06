@@ -6,41 +6,49 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { IfAdmin } from "@/features/auth/components/if-admin";
 import { deleteResume, retryResume } from "@/features/resumes/actions";
+import { ResumeFileLinks } from "@/features/resumes/components/resume-file-links";
 import { ResumeStatusBadge } from "@/features/resumes/components/resume-status-badge";
 import { isInProgress } from "@/features/resumes/labels";
 import type { Resume } from "@/lib/api/types";
-import { formatBytes, formatDateTime } from "@/lib/utils";
+import { formatBytes, formatDateTime, plural } from "@/lib/utils";
 
 import { UploadResume } from "./upload-resume";
 
-/** Every uploaded version of this person's resume, newest first; admins can upload, retry, delete. */
+/**
+ * Every uploaded version of this person's resume, newest first. Older versions are kept (not searched);
+ * admins can open or download the original file of each version, upload a new one, retry or delete.
+ */
 export function ResumeHistory({ employeeId, resumes }: { employeeId: number; resumes: Resume[] }) {
   const sorted = [...resumes].sort((a, b) => b.id - a.id);
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Resume versions</CardTitle>
+        <CardTitle>Resume versions ({sorted.length})</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {sorted.some((r) => isInProgress(r.status)) && <AutoRefresh seconds={5} />}
         {sorted.length === 0 && <p className="text-sm text-muted-foreground">No resume uploaded yet.</p>}
         <ul className="divide-y">
-          {sorted.map((resume) => (
+          {sorted.map((resume, index) => (
             <li key={resume.id} className="space-y-1.5 py-3 first:pt-0 last:pb-0">
               <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-medium text-muted-foreground">v{sorted.length - index}</span>
                 <span className="min-w-0 truncate text-sm font-medium" title={resume.original_filename}>
                   {resume.original_filename}
                 </span>
                 {resume.is_current && <Badge tone="info">current</Badge>}
-                <ResumeStatusBadge status={resume.status} />
+                <ResumeStatusBadge status={resume.status} isCurrent={resume.is_current} />
               </div>
               <p className="text-xs text-muted-foreground">
-                {formatBytes(resume.file_size_bytes)} · uploaded {formatDateTime(resume.created_at)}
+                {formatBytes(resume.file_size_bytes)}
+                {resume.page_count ? ` · ${plural(resume.page_count, "page")}` : ""} · uploaded{" "}
+                {formatDateTime(resume.created_at)}
               </p>
               {resume.error_message && <p className="text-xs text-destructive">{resume.error_message}</p>}
               <Suspense>
                 <IfAdmin>
                   <div className="flex flex-wrap gap-2">
+                    <ResumeFileLinks resume={resume} />
                     {resume.status === "failed" && (
                       <ActionButton action={retryResume.bind(null, resume.id)} label="Retry" pendingLabel="Retrying…" />
                     )}

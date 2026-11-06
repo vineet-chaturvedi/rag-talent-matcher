@@ -313,6 +313,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/resumes/{resume_id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Resume File
+         * @description The original file, exactly as uploaded (every version is kept, not only the current one).
+         *     Admins only: the original holds the contact details that the profile, the search index and the agent
+         *     leave out. PDFs open in the browser (inline); Word files are always downloaded, because browsers can't
+         *     show them. ?download=true downloads a PDF too.
+         */
+        get: operations["get_resume_file_api_resumes__resume_id__file_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/resumes/{resume_id}/profile": {
         parameters: {
             query?: never;
@@ -828,10 +851,11 @@ export interface components {
              * @default [
              *       "skills",
              *       "keyword",
-             *       "vector"
+             *       "vector",
+             *       "rerank"
              *     ]
              */
-            signals: ("skills" | "keyword" | "vector")[];
+            signals: ("skills" | "keyword" | "vector" | "rerank")[];
         };
         /** CandidatesResponse */
         CandidatesResponse: {
@@ -2671,6 +2695,39 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_resume_file_api_resumes__resume_id__file_get: {
+        parameters: {
+            query?: {
+                download?: boolean;
+            };
+            header?: never;
+            path: {
+                resume_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": unknown;
+                };
             };
             /** @description Validation Error */
             422: {

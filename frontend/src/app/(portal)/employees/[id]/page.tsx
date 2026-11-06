@@ -8,16 +8,19 @@ import { SectionBoundary } from "@/components/section-boundary";
 import { Alert } from "@/components/ui/alert";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { IfAdmin } from "@/features/auth/components/if-admin";
 import { EmployeeFacts } from "@/features/employees/components/employee-header";
 import { ProfileSections, ProfileSkeleton } from "@/features/employees/components/profile-sections";
 import { ResumeHistory } from "@/features/employees/components/resume-history";
 import { getEmployee } from "@/features/employees/queries";
+import { ResumeFileLinks } from "@/features/resumes/components/resume-file-links";
 import { idParam } from "@/lib/search-params";
 
 export const metadata: Metadata = { title: "Employee" };
 
 /**
  * One employee: HR facts, the AI profile of the current resume (with evidence), every resume version.
+ * Admins can open or download the original file of the current resume (header) and of every version.
  * The id comes from the URL (/employees/7); a bad or unknown id shows the 404 page.
  */
 export default function EmployeePage(props: PageProps<"/employees/[id]">) {
@@ -51,12 +54,24 @@ async function Employee({ params }: Pick<PageProps<"/employees/[id]">, "params">
 
   return (
     <>
-      <header className="mb-6 space-y-1">
-        <h1 className="text-xl font-semibold tracking-tight">{employee.full_name}</h1>
-        <p className="text-sm text-muted-foreground">
-          {employee.employee_code}
-          {employee.designation && ` · ${employee.designation}`}
-        </p>
+      <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h1 className="text-xl font-semibold tracking-tight">{employee.full_name}</h1>
+          <p className="text-sm text-muted-foreground">
+            {employee.employee_code}
+            {employee.designation && ` · ${employee.designation}`}
+          </p>
+        </div>
+        {current && (
+          <Suspense>
+            <IfAdmin>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted-foreground">Current resume:</span>
+                <ResumeFileLinks resume={current} />
+              </div>
+            </IfAdmin>
+          </Suspense>
+        )}
       </header>
       <div className="space-y-6">
         <Card>
