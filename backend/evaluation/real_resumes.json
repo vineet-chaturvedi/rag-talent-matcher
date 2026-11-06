@@ -195,6 +195,10 @@
           "n8n": [
             7.5,
             8.0
+          ],
+          "React": [
+            0.5,
+            0.5
           ]
         },
         "project_roles": {
@@ -221,7 +225,12 @@
           "2013",
           "2010"
         ],
-        "max_unknown_skills": 3
+        "max_unknown_skills": 3,
+        "skill_basis": {
+          "Laravel": "jobs",
+          "React": "projects",
+          "Dymo SDK": "projects"
+        }
       }
     },
     {
@@ -544,7 +553,10 @@
         "education_years": [
           "2015"
         ],
-        "max_unknown_skills": 3
+        "max_unknown_skills": 3,
+        "skill_levels": {
+          "Embeddings": "basic"
+        }
       }
     },
     {
@@ -678,7 +690,21 @@
         "education_years": [
           null
         ],
-        "max_unknown_skills": 3
+        "max_unknown_skills": 3,
+        "skill_basis": {
+          "Node.js": "estimated",
+          "React": "estimated"
+        },
+        "skill_years": {
+          "Node.js": [
+            6.0,
+            6.0
+          ],
+          "React": [
+            4.7,
+            4.9
+          ]
+        }
       }
     },
     {
@@ -814,7 +840,10 @@
         "education_years": [
           null
         ],
-        "max_unknown_skills": 3
+        "max_unknown_skills": 3,
+        "skill_levels": {
+          "Node.js": "expert"
+        }
       }
     },
     {
@@ -927,7 +956,20 @@
         "education_years": [
           null
         ],
-        "max_unknown_skills": 3
+        "max_unknown_skills": 3,
+        "skill_basis": {
+          "React Native": "estimated"
+        },
+        "skill_years": {
+          "React Native": [
+            5.0,
+            5.0
+          ]
+        },
+        "skill_levels": {
+          "iOS": "basic",
+          "JavaScript": null
+        }
       }
     },
     {
@@ -1101,7 +1143,94 @@
         "education_years": [
           null
         ],
-        "max_unknown_skills": 3
+        "max_unknown_skills": 3,
+        "skill_basis": {
+          "Go": "stated",
+          "Node.js": "stated"
+        },
+        "skill_years": {
+          "Go": [
+            9.0,
+            9.0
+          ],
+          "Node.js": [
+            9.0,
+            9.0
+          ]
+        }
+      }
+    },
+    {
+      "id": "S1",
+      "text": "SAMPLE PERSON\nBackend Developer\nProfessional Summary\nBackend developer with 3 years of experience. Currently learning Rust in my free time. Familiar with Kubernetes.\nCertifications\nAWS Certified Solutions Architect - Associate\nWork Experience\nDeveloper, Acme Corp (Jan 2023 - Present)\n- Built REST APIs with Django and PostgreSQL for the billing team.\n- Migrated 10 years of archived invoices with Python scripts.\nEducation\nB.Tech Computer Science, Pune University, 2022",
+      "about": "Synthetic: the edge cases none of the 9 real resumes contain (learning, certified-only, basic level, duration that is not a skill duration).",
+      "llm": {
+        "headline": "Backend Developer",
+        "summary": "Backend developer with 3 years of experience.",
+        "experience": [
+          {
+            "title": "Developer",
+            "company": "Acme Corp",
+            "start": "Jan 2023",
+            "end": "Present",
+            "description": "Built REST APIs."
+          }
+        ],
+        "projects": [],
+        "education": [
+          {
+            "degree": "B.Tech Computer Science",
+            "institution": "Pune University",
+            "year": "2022"
+          }
+        ],
+        "certifications": [
+          "AWS Certified Solutions Architect - Associate"
+        ]
+      },
+      "expect": {
+        "experience_basis": "dated jobs",
+        "total_years": [
+          3.5,
+          4.5
+        ],
+        "jobs": 1,
+        "projects": 0,
+        "skills_present": [
+          "Django",
+          "PostgreSQL",
+          "Python",
+          "Rust",
+          "Kubernetes",
+          "AWS"
+        ],
+        "skills_absent": [],
+        "skill_sources": {
+          "Rust": "learning",
+          "AWS": "certified",
+          "Kubernetes": "mentioned",
+          "Django": "job"
+        },
+        "skill_levels": {
+          "Kubernetes": "basic"
+        },
+        "skill_basis": {
+          "Django": "jobs",
+          "Python": "jobs"
+        },
+        "skill_years": {
+          "Django": [
+            3.5,
+            4.5
+          ],
+          "Python": [
+            3.5,
+            4.5
+          ]
+        },
+        "education_years": [
+          "2022"
+        ]
       }
     }
   ]

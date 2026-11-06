@@ -33,7 +33,9 @@ class ResumeSkill(Base):
     # Doc 18: most real resumes have no dated jobs, so years are often unknown. How many jobs and projects
     # USED the skill, and where the best evidence is, still say how strong it is.
     uses: Mapped[int | None] = mapped_column(default=0)        # jobs + projects using it
-    source: Mapped[str | None] = mapped_column(String(20))     # job / project / skills list / mentioned
+    source: Mapped[str | None] = mapped_column(String(20))     # job / project / skills list / certified / mentioned / learning
+    years_basis: Mapped[str | None] = mapped_column(String(20))  # jobs / projects / stated / estimated (evidence ladder)
+    level: Mapped[str | None] = mapped_column(String(10))        # basic / expert, when the resume says so
 
     resume: Mapped["Resume"] = relationship(back_populates="skills")
     skill: Mapped["Skill"] = relationship(back_populates="resume_links")

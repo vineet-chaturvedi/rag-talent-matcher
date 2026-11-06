@@ -8,6 +8,9 @@ so the queue survives restarts and crashes.
   parse      QUEUED     PARSING      PARSED       Step 4: file -> plain text
   extract    PARSED     EXTRACTING   EXTRACTED    Step 5: plain text -> structured profile (LLM)
   embed      EXTRACTED  EMBEDDING    READY        Step 6: chunks -> vectors -> ChromaDB
+
+Each resume is finished one by one (see STAGES for the order): an admin sees every resume become ready as
+soon as its own processing is done.
 """
 import asyncio
 import logging
@@ -36,12 +39,18 @@ class Stage:
     working: ResumeStatus     # ...mark them with this while processing
 
 
-# Earlier stages first: cheap parsing of new uploads never waits behind slow LLM work.
-STAGES = [
-    Stage("parse", ResumeStatus.QUEUED, ResumeStatus.PARSING),
-    Stage("extract", ResumeStatus.PARSED, ResumeStatus.EXTRACTING),
-    Stage("embed", ResumeStatus.EXTRACTED, ResumeStatus.EMBEDDING),
-]
+PARSE = Stage("parse", ResumeStatus.QUEUED, ResumeStatus.PARSING)
+EXTRACT = Stage("extract", ResumeStatus.PARSED, ResumeStatus.EXTRACTING)
+EMBED = Stage("embed", ResumeStatus.EXTRACTED, ResumeStatus.EMBEDDING)
+
+# The order in which the worker looks for work. Finish what is nearly done FIRST, so each resume becomes
+# READY (searchable, visible with its profile) right after its own LLM step, not after the whole batch:
+#   1. embed    seconds: a resume whose profile is done is made searchable at once
+#   2. parse    seconds: a broken or scanned file is reported right after upload
+#   3. extract  minutes (the LLM): oldest upload first
+# Version 1 ran the stages in pipeline order (parse all, extract all, embed all), so with 20 resumes in the
+# queue none was ready until the LLM had finished all 20 (finding, 2026-11-06).
+STAGES = [EMBED, PARSE, EXTRACT]
 
 
 @dataclass

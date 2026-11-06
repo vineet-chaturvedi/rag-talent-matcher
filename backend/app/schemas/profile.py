@@ -17,7 +17,9 @@ class ProfileSkillOut(BaseModel):
     last_used_year: int | None
     evidence: str | None
     uses: int = 0                       # jobs + projects that used it (doc 18)
-    source: str | None = None           # job / project / skills list / mentioned
+    source: str | None = None           # job / project / skills list / certified / mentioned / learning
+    years_basis: str | None = None      # jobs / projects / stated / estimated: how the years were found
+    level: str | None = None            # basic / expert, when the resume says so
 
 
 class ProfileProjectOut(BaseModel):

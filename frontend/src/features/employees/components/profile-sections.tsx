@@ -120,7 +120,9 @@ function Skills({ profile }: { profile: Profile }) {
                       <span className="block text-xs font-normal text-muted-foreground">{skill.category}</span>
                     )}
                   </TableCell>
-                  <TableCell className="text-right whitespace-nowrap tabular-nums">{skillStrength(skill)}</TableCell>
+                  <TableCell className="text-right whitespace-nowrap tabular-nums">
+                    <SkillStrength skill={skill} />
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">{skill.last_used_year ?? "–"}</TableCell>
                   <TableCell className="max-w-md text-xs text-muted-foreground">
                     {skill.evidence ? <q>{skill.evidence}</q> : "–"}
@@ -139,14 +141,49 @@ const SOURCE_LABEL: Record<string, string> = {
   job: "in a job",
   project: "in a project",
   "skills list": "listed",
+  certified: "certified",
   mentioned: "mentioned",
+  learning: "learning",
 };
 
-/** "8.7 y" when dated jobs show it; otherwise "3 projects", "listed" or "mentioned". */
-function skillStrength(skill: ProfileSkill): string {
-  if (skill.years !== null) return `${skill.years} y`;
-  if (skill.uses > 0) return skill.uses === 1 ? "1 project" : `${skill.uses} projects`;
-  return SOURCE_LABEL[skill.source ?? ""] ?? "–";
+/** How the years were found (the evidence ladder): only dated jobs give a plain number. */
+const BASIS_NOTE: Record<string, string> = {
+  projects: "from the written project durations",
+  stated: "as stated in the resume",
+  estimated: "estimated: the resume has no dated jobs; total years × share of projects using it",
+};
+
+/**
+ * "8.7 y" from dated jobs · "≈ 5 y" estimated · "1.3 y" from project durations or as stated (with a tooltip)
+ * · otherwise "3 projects", "listed", "certified", "learning".
+ */
+function SkillStrength({ skill }: { skill: ProfileSkill }) {
+  const level = skill.level ? <span className="block text-xs text-muted-foreground">{skill.level}</span> : null;
+  if (skill.years !== null) {
+    const note = BASIS_NOTE[skill.years_basis ?? ""];
+    const text = skill.years_basis === "estimated" ? `≈ ${skill.years} y` : `${skill.years} y`;
+    return (
+      <>
+        {note ? (
+          <abbr title={note} className="cursor-help no-underline decoration-dotted hover:underline">
+            {text}
+            {skill.years_basis !== "jobs" && <span className="sr-only"> ({note})</span>}
+          </abbr>
+        ) : (
+          text
+        )}
+        {level}
+      </>
+    );
+  }
+  const text =
+    skill.uses > 0 ? (skill.uses === 1 ? "1 project" : `${skill.uses} projects`) : SOURCE_LABEL[skill.source ?? ""];
+  return (
+    <>
+      {text ?? "–"}
+      {level}
+    </>
+  );
 }
 
 function Projects({ profile }: { profile: Profile }) {

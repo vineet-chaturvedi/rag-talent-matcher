@@ -1483,6 +1483,10 @@ export interface components {
             uses: number;
             /** Source */
             source?: string | null;
+            /** Years Basis */
+            years_basis?: string | null;
+            /** Level */
+            level?: string | null;
         };
         /** ProjectCounts */
         ProjectCounts: {

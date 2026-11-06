@@ -213,7 +213,7 @@ async def get_profile(resume_id: int, db: AsyncSession = Depends(get_db)):
         skills=[
             {"name": link.skill.name, "category": link.skill.category, "years": link.years,
              "last_used_year": link.last_used_year, "evidence": link.evidence,
-             "uses": link.uses or 0, "source": link.source}
+             "uses": link.uses or 0, "source": link.source, "years_basis": link.years_basis, "level": link.level}
             for link in skills
         ],
         projects=[

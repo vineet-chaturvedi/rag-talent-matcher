@@ -47,6 +47,8 @@ SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=
 ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("resume_skills", "uses", "INTEGER DEFAULT 0"),      # doc 18 extraction fix
     ("resume_skills", "source", "VARCHAR(20)"),
+    ("resume_skills", "years_basis", "VARCHAR(20)"),    # evidence ladder (doc 09, 13.6)
+    ("resume_skills", "level", "VARCHAR(10)"),
 ]
 
 

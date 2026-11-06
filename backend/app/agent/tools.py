@@ -160,11 +160,14 @@ async def get_employee_profile(ctx: ToolContext, a: EmployeeArgs) -> dict:
     skills = sorted(resume.skills, key=lambda s: (-(s.years or 0), -(s.uses or 0)))[:20]
 
     def skill_text(s) -> str:
+        level = f", {s.level}" if s.level else ""
         if s.years:
-            return f"{s.skill.name} ({s.years} y, last used {s.last_used_year})"
+            how = {"estimated": "estimated", "stated": "as stated", "projects": "from project durations"}.get(
+                s.years_basis or "", f"last used {s.last_used_year}")
+            return f"{s.skill.name} ({s.years} y, {how}{level})"
         if s.uses:
-            return f"{s.skill.name} (used in {s.uses} project{'s' if s.uses > 1 else ''})"
-        return f"{s.skill.name} (listed)"
+            return f"{s.skill.name} (used in {s.uses} project{'s' if s.uses > 1 else ''}{level})"
+        return f"{s.skill.name} ({s.source or 'listed'}{level})"
 
     basis = (resume.profile.raw_extraction or {}).get("experience_basis")
     out.update(

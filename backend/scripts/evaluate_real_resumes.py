@@ -68,6 +68,13 @@ def check(profile: Profile, expect: dict) -> list[tuple[str, bool, str]]:
     for name, bounds in expect.get("skill_years", {}).items():
         got = by_name[name].years if name in by_name else None
         results.append((f"{name} years {bounds}", _in_range(got, bounds), str(got)))
+    for key, attr in (("skill_basis", "years_basis"), ("skill_levels", "level"), ("skill_sources", "source")):
+        for name, wanted in expect.get(key, {}).items():
+            got = getattr(by_name[name], attr) if name in by_name else "skill not found"
+            results.append((f"{name} {attr} = {wanted}", got == wanted, str(got)))
+    if profile.total_experience_years is not None:
+        over = [f"{s.name} {s.years}" for s in profile.skills if s.years and s.years > profile.total_experience_years]
+        results.append(("no skill has more years than the whole career", not over, ", ".join(over) or "none"))
     for name, least in expect.get("min_uses", {}).items():
         got = by_name[name].uses if name in by_name else 0
         results.append((f"{name} used in >= {least} jobs/projects", got >= least, str(got)))
@@ -96,7 +103,8 @@ def show(profile: Profile) -> None:
         print(f"    job: {job.title} @ {job.company} {job.start_date}..{job.end_date or 'present'}: {', '.join(job.skills)}")
     for p in profile.projects:
         print(f"    project: {p.name} [{p.role}] {p.duration_months or ''} {p.job_basis or ''}: {', '.join(p.technologies)}")
-    print("    skills: " + ", ".join(f"{s.name}({s.years or '-'}y,{s.uses}x,{s.source})" for s in profile.skills))
+    print("    skills: " + ", ".join(f"{s.name}({s.years or '-'}y {s.years_basis or ''},{s.uses}x,{s.source}"
+                                    f"{',' + s.level if s.level else ''})" for s in profile.skills))
     for w in profile.warnings:
         print(f"    warning: {w}")
 
@@ -120,6 +128,29 @@ async def main() -> int:
     try:
         for case in data["resumes"]:
             if args.only and case["id"] not in args.only:
+                continue
+            if "text" in case:                       # a synthetic resume written into the test set
+                started = time.perf_counter()
+                answer = case["llm"] if args.offline else None
+                if answer is None:
+                    outcome = await extract_profile(
+                        ollama, case["text"], model=settings.extraction_model, num_ctx=settings.llm_num_ctx,
+                        max_output_tokens=settings.extraction_max_output_tokens,
+                        max_input_chars=settings.extraction_max_input_chars,
+                    )
+                    profile = outcome.profile
+                else:
+                    profile = build_profile(ResumeExtraction.model_validate(answer), case["text"])
+                results = check(profile, case["expect"])
+                ok = sum(r[1] for r in results)
+                print(f"\n{case['id']} (synthetic): {ok}/{len(results)} checks ({time.perf_counter() - started:.1f} s)")
+                for description, good, got in results:
+                    if not good or args.show:
+                        print(f"  {'PASS' if good else 'FAIL'}  {description}  -> {got}")
+                if args.show:
+                    show(profile)
+                passed += ok
+                failed += len(results) - ok
                 continue
             path = FILES / case["file"]
             if not path.exists():

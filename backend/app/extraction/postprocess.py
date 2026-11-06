@@ -21,10 +21,11 @@ from difflib import SequenceMatcher
 from app.extraction.dates import interval, months_to_years, parse_range, total_months
 from app.extraction.schema import ResumeExtraction
 from app.extraction.sections import (
-    EXPERIENCE, HEADER, PROJECTS, RESPONSIBILITIES, SKILLS, SUMMARY, Section, section_at, split_sections,
+    CERTIFICATIONS, EXPERIENCE, HEADER, PROJECTS, RESPONSIBILITIES, SKILLS, SUMMARY, Section, section_at,
+    split_sections,
 )
 from app.extraction.skills import (
-    TECH_SINCE, category_of, find_skills, is_known, normalize_skill, skills_in_phrase, spellings,
+    TECH_SINCE, category_of, find_skills, is_known, normalize_skill, skills_in, skills_in_phrase, spellings,
     with_implied_use,
 )
 
@@ -33,11 +34,17 @@ from app.extraction.skills import (
 class ProfileSkill:
     name: str
     category: str | None
-    years: float | None          # None = no dated job shows it (listed, or used in undated projects)
+    years: float | None          # see years_basis for how sure we are; None = no evidence of duration at all
     last_used_year: int | None
     evidence: str | None         # a line from the resume
     uses: int = 0                # jobs + projects in which it was used
-    source: str = "mentioned"    # where the strongest evidence is: job / project / skills list / mentioned
+    source: str = "mentioned"    # where the strongest evidence is: job / project / skills list / certified /
+                                 # mentioned / learning
+    years_basis: str | None = None   # the evidence ladder (doc 09, 13.6), strongest first:
+                                     # "jobs" (dated jobs) / "projects" (written project durations) /
+                                     # "stated" (a duration written next to the skill) / "estimated" (core skill of
+                                     # an undated resume: stated total x share of projects) / None
+    level: str | None = None         # "basic" ("basics of", "familiar with") / "expert" / None (not stated)
 
 
 @dataclass
@@ -113,6 +120,8 @@ def contains_phrase(text_norm: str, phrase: str) -> bool:
 
 _STATED_YEARS = re.compile(r"(\d+(?:\.\d+)?)\s*\+?\s*(?:yrs?|years?)\b(?!\s*(?:old|of age))", re.IGNORECASE)
 # A duration written next to a skill: "4 years Golang", "React (1 yr)", "Django ... ~1 year", "5+ years of React".
+# The same, but "8+ years of experience ... in Python and Django" counts as a minimum for the named skills.
+_SKILL_YEARS_ANY = re.compile(r"(\d+(?:\.\d+)?)\s*(\+)\s*(?:yrs?|years?)\b(?!\s*(?:old|of age))", re.IGNORECASE)
 _SKILL_YEARS = re.compile(r"(\d+(?:\.\d+)?)\s*(\+)?\s*(?:yrs?|years?)\b(?!\s*(?:old|of age|of (?:total |overall )?experience))",
                           re.IGNORECASE)
 
@@ -328,7 +337,16 @@ def duration_months(text: str | None) -> int | None:
     return round(total) if found else None
 
 
-_EXPOSURE = re.compile(r"\b(team (?:who|that|which)|exposure to|assisted (?:the )?team)\b", re.IGNORECASE)
+_EXPOSURE = re.compile(r"\b(team (?:who|that|which)|assisted (?:the )?team)\b", re.IGNORECASE)
+# Words next to a skill that say how well the person knows it.
+_BASIC = re.compile(r"\b(basics?|beginner|familiar(?:ity)? with|exposure to|elementary|introductory|some knowledge)\b",
+                    re.IGNORECASE)
+_EXPERT = re.compile(r"\b(expert|advanced|proficient|deep (?:knowledge|expertise|experience)|strong expertise|"
+                     r"extensive|mastery)\b", re.IGNORECASE)
+# Learning is not using: "currently learning Rust", "exploring LLM agents".
+_LEARNING = re.compile(r"\b(currently (?:learning|exploring|studying)|am learning|learning to|planning to learn|"
+                       r"interested in learning|self-studying)\b", re.IGNORECASE)
+_CERTIFIED = re.compile(r"\bcertifi(?:ed|cation|cate)\b", re.IGNORECASE)
 _URL = re.compile(r"https?://\S+")
 
 
@@ -458,19 +476,47 @@ def build_profile(llm: ResumeExtraction, resume_text: str, today: date | None = 
         listed: bool = False
         claimed: bool = False
         exposure_only_line: str | None = None
+        certified: bool = False
+        learning: bool = False
+        levels: set = field(default_factory=set)         # "basic" / "expert" seen next to it
         evidence: dict = field(default_factory=dict)     # source -> line text
         api_only: bool = True                            # only ever written as "X API(s)": integrated, not built with
 
     usage: dict[str, Usage] = {}
 
-    def record(name: str, line_index: int, from_list: bool = False, api: bool = False) -> None:
+    def record(name: str, line_index: int, from_list: bool = False, api: bool = False,
+               start: int | None = None, end: int | None = None) -> None:
         u = usage.setdefault(name, Usage())
         u.api_only = u.api_only and api
         text = lines[line_index].strip()
         if _EXPOSURE.search(text):
             u.exposure_only_line = u.exposure_only_line or text
             return
+        # The words just BEFORE the mention ("basics of X", "expert in X", "currently learning X"), or a level
+        # right after it ("iOS basic", "React (beginner)"). Not further: in "JS and basics of native apps"
+        # the "basics" belong to native apps, not to JS.
+        if start is not None:
+            line_start = line_starts[line_index]
+            before = resume_text[max(line_start, start - 60):start]
+            before = re.split(r"[;.|:]", before)[-1]                  # stay inside the same sentence / list item
+            after = resume_text[end:min(end + 14, line_starts[line_index + 1])]
+            local = before + resume_text[start:end] + (after if re.match(r"\W{0,3}(basic|beginner|expert|advanced)\b",
+                                                                         after, re.IGNORECASE) else "")
+        else:
+            local = text
+        if _LEARNING.search(local):
+            u.learning = True
+            u.evidence.setdefault("learning", text)
+            return
+        if _BASIC.search(local):
+            u.levels.add("basic")
+        elif _EXPERT.search(local):
+            u.levels.add("expert")
         section = section_at(sections, line_index)
+        if (section and section.kind == CERTIFICATIONS) or _CERTIFIED.search(local):
+            u.certified = True
+            u.evidence.setdefault("certified", text)
+            return
         project = project_containing(line_index)
         job = job_containing(line_index)
         if project is not None:
@@ -500,31 +546,48 @@ def build_profile(llm: ResumeExtraction, resume_text: str, today: date | None = 
         by_line.setdefault(line_of(start), []).append((name, start, end))
     for i, found in by_line.items():
         line = lines[i]
+        names = list(dict.fromkeys(n for n, _, _ in found))
         if not _SKILL_YEARS.search(line):
             continue
-        names = list(dict.fromkeys(n for n, _, _ in found))
-        if len(names) == 1:
-            clauses = [(line, names)]
-        else:                                   # several skills: only the one in the same clause
-            base = line_starts[i]
-            clauses = []
-            for part in re.finditer(r"[^,;|]+", line):
-                inside = [n for n, s0, _ in found if part.start() <= s0 - base < part.end()]
-                clauses.append((part.group(0), list(dict.fromkeys(inside))))
-        for clause, inside in clauses:
-            if len(inside) != 1:
+        base = line_starts[i]
+        clauses = []                            # each clause with its skills and where they are in the line
+        for part in re.finditer(r"[^,;|]+", line) if len(names) > 1 else [re.match(r".*", line)]:
+            inside = [(n, s0 - base, e0 - base) for n, s0, e0 in found if part.start() <= s0 - base < part.end()]
+            clauses.append((part.group(0), part.start(), inside))
+        for clause, offset, inside in clauses:
+            if len({n for n, _, _ in inside}) != 1:
                 continue
             m = _SKILL_YEARS.search(clause)
             if not m:
                 continue
+            # Only a duration written right next to the skill counts: "4 years Golang", "React (1 yr)",
+            # "Django ... (2021-2022, ~1 year)" - not "migrated 10 years of archived invoices with Python".
+            name, s0, e0 = inside[0]
+            at, until = offset + m.start(), offset + m.end()
+            if until <= s0:                     # duration first: "4 years Golang", "5+ years of React"
+                near = s0 - until <= 12
+            else:                               # skill first: "React (1 yr)", "Python for 3 years", "Django (2021-22, ~1 year)"
+                near = at - e0 <= 12 or ("(" in line[e0:at] and ")" not in line[e0:at] and at - e0 <= 60)
+            if not near:
+                continue
             value = float(m.group(1))
             target = stated_min if m.group(2) else stated_cap
-            target[inside[0]] = min(target.get(inside[0], value), value)
+            target[name] = min(target.get(name, value), value)
+
+    # "9+ years of experience ... using Golang and Nodejs" (a sentence may wrap over lines): a minimum for
+    # every skill in that sentence, if it names at most 3.
+    for paragraph in re.split(r"\n\s*\n", resume_text):
+        for sentence in re.split(r"(?<=[.!?])\s+", paragraph.replace("\n", " ")):
+            m = _SKILL_YEARS_ANY.search(sentence)
+            inside = skills_in(sentence) if m else []
+            if 1 < len(inside) <= 3:
+                for n in inside:
+                    stated_min.setdefault(n, float(m.group(1)))
 
     for name, start, end in mentions:
         # "integrates multiple WordPress APIs": calling a system's API is not building with it (no PHP implied)
         api = category_of(name) != "integration" and bool(re.match(r"\s+APIs?\b", resume_text[end:end + 6]))
-        record(name, line_of(start), api=api)
+        record(name, line_of(start), api=api, start=start, end=end)
     for section in sections:
         if section.kind == SKILLS:
             items = skills_list_items([(i, lines[i]) for i in range(section.start, section.end)])
@@ -554,50 +617,7 @@ def build_profile(llm: ResumeExtraction, resume_text: str, today: date | None = 
     for j, job in enumerate(jobs):
         job.skills = [n for n, u in usage.items() if j in u.jobs]
 
-    # ---- 4. Skills with years
-    skills: list[ProfileSkill] = []
-    for name, u in usage.items():
-        if not (u.jobs or u.projects or u.listed or u.claimed):
-            if u.exposure_only_line:
-                rejected.append({"name": name, "evidence": u.exposure_only_line,
-                                 "reason": "only written as someone else's work (e.g. 'worked with a team who ...')"})
-            continue
-        since = TECH_SINCE.get(name)
-        job_spans = []
-        for j in sorted(u.jobs):
-            if spans[j] is None:
-                continue
-            first, last = spans[j]
-            if since:
-                first = max(first, since * 12)              # not before the technology existed
-            if first <= last:
-                job_spans.append((first, last))
-        years = months_to_years(total_months(job_spans)) if job_spans else None
-        if name in stated_cap:                           # "~1 year" next to the skill: never more than that
-            years = min(years, stated_cap[name]) if years is not None else stated_cap[name]
-        elif years is None and name in stated_min:       # "5+ years of React" and no dated job shows it
-            years = stated_min[name]
-        last_used = None
-        for j in u.jobs:
-            if jobs[j].is_current:
-                last_used = today.year
-            elif jobs[j].end_date:
-                last_used = max(last_used or 0, jobs[j].end_date.year)
-        for p in u.projects:
-            j = projects[p].job_index
-            if j is not None and projects[p].job_basis == "inside job":
-                end_year = today.year if jobs[j].is_current else (jobs[j].end_date.year if jobs[j].end_date else None)
-                last_used = max(last_used or 0, end_year or 0) or last_used
-        source = ("job" if u.jobs else "project" if u.projects else "skills list" if u.listed else "mentioned")
-        evidence = u.evidence.get(source) or u.evidence.get("implied") or next(iter(u.evidence.values()), None)
-        skills.append(ProfileSkill(
-            name=name, category=category_of(name), years=years, last_used_year=last_used,
-            evidence=(evidence or "")[:300] or None, uses=len(u.jobs) + len(u.projects), source=source,
-        ))
-    rank = {"job": 0, "project": 1, "skills list": 2, "mentioned": 3}
-    skills.sort(key=lambda s: (-(s.years or 0), -s.uses, rank[s.source], s.name.lower()))
-
-    # ---- 5. Total experience: dated jobs, else what the resume states
+    # ---- 4. Total experience: dated jobs, else what the resume states
     valid = [s for s in spans if s]
     computed = months_to_years(total_months(valid)) if valid else None
     intro = "\n".join(s.text(lines) for s in sections if s.kind in (HEADER, SUMMARY)) or "\n".join(lines[:15])
@@ -612,6 +632,80 @@ def build_profile(llm: ResumeExtraction, resume_text: str, today: date | None = 
             total, basis = claimed_years, "stated in resume"
         elif computed - claimed_years > 2:
             warnings.append(f"The dated jobs cover {computed} years, more than the {claimed_years:g} years stated.")
+
+    # ---- 5. Skills, with years from the strongest evidence available (the evidence ladder, doc 09 13.6)
+    #   jobs       the dated jobs whose text uses it (also implied use), not before the technology existed
+    #   projects   the written durations of the projects using it ("6 Months"), when no dated job shows it
+    #   stated     a duration written next to the skill: caps "jobs"; used alone when nothing else is dated
+    #   estimated  undated resume, core skill (in the title, or used in most projects):
+    #              stated total years x share of projects using it
+    #   Every value is also capped by the total experience and by the technology's age.
+    title_skills = set(skills_in(llm.headline or "")) | set(skills_in(next(iter(lines), "")))
+    n_projects = len(projects)
+    skills: list[ProfileSkill] = []
+    for name, u in usage.items():
+        if not (u.jobs or u.projects or u.listed or u.claimed or u.certified or u.learning):
+            if u.exposure_only_line:
+                rejected.append({"name": name, "evidence": u.exposure_only_line,
+                                 "reason": "only written as someone else's work (e.g. 'worked with a team who ...')"})
+            continue
+        since = TECH_SINCE.get(name)
+        age_cap = round(today.year - since + today.month / 12, 1) if since else None
+        job_spans = []
+        for j in sorted(u.jobs):
+            if spans[j] is None:
+                continue
+            first, last = spans[j]
+            if since:
+                first = max(first, since * 12)              # not before the technology existed
+            if first <= last:
+                job_spans.append((first, last))
+        years, ybasis = (months_to_years(total_months(job_spans)), "jobs") if job_spans else (None, None)
+        if years is None:
+            months = [projects[p].duration_months for p in u.projects if projects[p].duration_months]
+            if months:
+                years, ybasis = round(sum(months) / 12, 1), "projects"
+        if name in stated_cap:                           # "~1 year" next to the skill: never more than that
+            if years is None or stated_cap[name] < years:
+                years, ybasis = stated_cap[name], (ybasis if years is not None and ybasis == "jobs" else "stated")
+        elif years is None and name in stated_min:       # "5+ years of React" and nothing dated shows it
+            years, ybasis = stated_min[name], "stated"
+        if years is None and total is not None and not job_spans and n_projects:
+            share = len(u.projects) / n_projects
+            if name in title_skills and u.projects:
+                share = max(share, 1.0)                  # "React Native Developer": the core of the career
+            if share >= 0.6 and (len(u.projects) >= 2 or name in title_skills):
+                years, ybasis = round(total * min(1.0, share), 1), "estimated"
+        if years is not None:
+            if total is not None:
+                years = min(years, total)
+            if age_cap is not None:
+                years = min(years, age_cap)
+        last_used = None
+        for j in u.jobs:
+            if jobs[j].is_current:
+                last_used = today.year
+            elif jobs[j].end_date:
+                last_used = max(last_used or 0, jobs[j].end_date.year)
+        for p in u.projects:
+            j = projects[p].job_index
+            if j is not None and projects[p].job_basis == "inside job":
+                end_year = today.year if jobs[j].is_current else (jobs[j].end_date.year if jobs[j].end_date else None)
+                last_used = max(last_used or 0, end_year or 0) or last_used
+        if last_used is None and ybasis == "estimated" and name in title_skills:
+            last_used = today.year                       # the job title they have now
+        source = ("job" if u.jobs else "project" if u.projects else "skills list" if u.listed
+                  else "certified" if u.certified else "mentioned" if u.claimed else "learning")
+        evidence = u.evidence.get(source) or u.evidence.get("implied") or next(iter(u.evidence.values()), None)
+        level = "basic" if u.levels == {"basic"} else "expert" if "expert" in u.levels and "basic" not in u.levels \
+            else None
+        skills.append(ProfileSkill(
+            name=name, category=category_of(name), years=years, last_used_year=last_used,
+            evidence=(evidence or "")[:300] or None, uses=len(u.jobs) + len(u.projects), source=source,
+            years_basis=ybasis, level=level,
+        ))
+    rank = {"job": 0, "project": 1, "skills list": 2, "certified": 3, "mentioned": 4, "learning": 5}
+    skills.sort(key=lambda s: (-(s.years or 0), -s.uses, rank[s.source], s.name.lower()))
 
     if not llm.experience and not projects:
         warnings.append("No jobs or projects were found.")

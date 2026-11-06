@@ -40,7 +40,8 @@ async def index_resume(resume_id: int, ollama: OllamaClient, settings: Settings)
         if resume is None:
             return False
         profile = resume.profile
-        skills = sorted(((l.skill.name, l.years, l.uses or 0) for l in resume.skills),
+        skills = sorted(((l.skill.name, l.years, l.uses or 0, l.years_basis) for l in resume.skills
+                         if l.source != "learning"),
                         key=lambda s: (-(s[1] or 0), -s[2]))
         projects = [ProjectInfo(p.name, p.role, p.duration_text, p.technologies or [], p.company)
                     for p in resume.projects]

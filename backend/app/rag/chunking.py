@@ -148,7 +148,7 @@ def build_chunks(
     headline: str | None,
     total_years: float | None,
     summary: str | None,
-    skills: list[tuple[str, float | None]] | list[tuple[str, float | None, int]],
+    skills: list[tuple],             # (name, years) or (name, years, uses) or (name, years, uses, years_basis)
     jobs: list[JobInfo],
     max_chars: int,
     overlap: int,
@@ -159,8 +159,8 @@ def build_chunks(
     clean = (lambda t: anonymize(t, full_name)) if anonymize_text else (lambda t: t)
     chunks: list[ChunkDraft] = []
     projects = projects or []
-    skill_rows = [(s[0], s[1], s[2] if len(s) > 2 else 0) for s in skills]
-    skill_names = [name for name, _, _ in skill_rows]
+    skill_rows = [(s[0], s[1], s[2] if len(s) > 2 else 0, s[3] if len(s) > 3 else None) for s in skills]
+    skill_names = [row[0] for row in skill_rows]
 
     def add(section: ChunkSection, header: str, body: str) -> None:
         for piece in split_text(clean(body), max_chars - len(header) - 1, overlap) or [""]:
@@ -176,9 +176,9 @@ def build_chunks(
     if summary:
         card.append(summary)
     if skill_rows:
-        def label(name: str, years: float | None, uses: int) -> str:
+        def label(name: str, years: float | None, uses: int, basis: str | None) -> str:
             if years:
-                return f"{name} ({years} years)"
+                return f"{name} (about {years} years)" if basis == "estimated" else f"{name} ({years} years)"
             return f"{name} (used in {uses} projects)" if uses > 1 else name
         card.append("Skills: " + ", ".join(label(*row) for row in skill_rows))
     if len(card) > 1:

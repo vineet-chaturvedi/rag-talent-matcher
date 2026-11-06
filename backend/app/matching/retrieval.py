@@ -103,20 +103,34 @@ def check_availability(emp: Employee, role: ProjectRole) -> Availability:
 
 
 # --------------------------------------------------------------------------- ① skills signal
-def _credit(direct: bool, years: float | None, last_used: int | None, needed_years: float, uses: int = 0) -> float:
+# How much an ESTIMATED duration counts compared with one from dated jobs (doc 09, 13.6).
+ESTIMATE_WEIGHT = 0.75
+# What a mention that is not use is worth, instead of the years factor.
+SOURCE_FACTOR = {"certified": 0.65, "learning": 0.3}
+LEVEL_FACTOR = {"basic": 0.7}
+
+
+def _credit(direct: bool, years: float | None, last_used: int | None, needed_years: float, uses: int = 0,
+            years_basis: str | None = None, source: str | None = None, level: str | None = None) -> float:
     """
     How well one employee skill covers one requirement (0..1):
       base     1.0 for the exact skill, 0.6 for an implied one (EKS for Kubernetes)
-      years    0.4 + 0.6 * min(1, years / needed)
+      years    0.4 + 0.6 * min(1, years / needed); an ESTIMATED duration counts at 75%
                unknown years: by how many projects used it (doc 18: most real resumes have no dated jobs)
                only listed 0.6 · 1 project 0.7 · 2 projects 0.8 · 3 or more 0.9
+               certified, never shown in use 0.65 · only "currently learning" 0.3
+      level    "basics of X" / "familiar with X": x 0.7
       recency  used this/last year 1.0 · within 3 years 0.8 · older 0.5 · unknown 0.8
     """
     base = 1.0 if direct else 0.6
-    if years is None:
+    if source in SOURCE_FACTOR and not uses:
+        years_factor = SOURCE_FACTOR[source]
+    elif years is None:
         years_factor = 0.6 if not uses else min(0.9, 0.6 + 0.1 * uses)
     else:
-        years_factor = 0.4 + 0.6 * min(1.0, years / needed_years)
+        counted = years * ESTIMATE_WEIGHT if years_basis == "estimated" else years
+        years_factor = 0.4 + 0.6 * min(1.0, counted / needed_years)
+    years_factor *= LEVEL_FACTOR.get(level or "", 1.0)
     if last_used is None:
         recency = 0.8
     else:
@@ -135,7 +149,8 @@ def _best_match(required: str, min_years: float | None, links: list[ResumeSkill]
         direct = name.lower() == req                      # case-insensitive: "LLM evaluation" = "llm evaluation"
         if not direct and req not in {i.lower() for i in implied_by(name)}:
             continue
-        credit = _credit(direct, link.years, link.last_used_year, needed, link.uses or 0)
+        credit = _credit(direct, link.years, link.last_used_year, needed, link.uses or 0,
+                         link.years_basis, link.source, link.level)
         if best is None or credit > best.credit:
             best = SkillMatch(required, name, direct, link.years, link.last_used_year, credit, link.evidence)
     return best

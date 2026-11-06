@@ -99,7 +99,7 @@ async def save_profile(session: AsyncSession, resume_id: int, outcome: Extractio
     )
     resume.skills = [
         ResumeSkill(skill=skill_rows[s.name[:100]], years=s.years, last_used_year=s.last_used_year,
-                    evidence=s.evidence, uses=s.uses, source=s.source)
+                    evidence=s.evidence, uses=s.uses, source=s.source, years_basis=s.years_basis, level=s.level)
         for s in unique.values()
     ]
 
