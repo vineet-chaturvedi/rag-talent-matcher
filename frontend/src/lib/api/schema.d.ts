@@ -1144,6 +1144,7 @@ export interface components {
              * @default {
              *       "must_matched": [],
              *       "must_missing": [],
+             *       "named_in_text": [],
              *       "nice_matched": [],
              *       "keyword_snippets": []
              *     }
@@ -1447,6 +1448,10 @@ export interface components {
             retrieval_timings?: {
                 [key: string]: unknown;
             } | null;
+            /** Qualified */
+            qualified?: number | null;
+            /** Excluded Without Must Haves */
+            excluded_without_must_haves?: number | null;
         };
         /**
          * MatchRunStatus
@@ -1944,6 +1949,11 @@ export interface components {
              * @default []
              */
             must_missing: string[];
+            /**
+             * Named In Text
+             * @default []
+             */
+            named_in_text: string[];
             /**
              * Nice Matched
              * @default []

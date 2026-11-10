@@ -43,6 +43,7 @@ async function Run({ params }: Pick<PageProps<"/match-runs/[id]">, "params">) {
   const run = result.data;
   const requirements = run.settings?.requirements;
   const judgeWeight = run.settings?.judge_weight ?? 0.4;
+  const excluded = run.settings?.excluded_without_must_haves ?? 0;
 
   return (
     <>
@@ -72,14 +73,22 @@ async function Run({ params }: Pick<PageProps<"/match-runs/[id]">, "params">) {
             {run.settings?.judge_model && <span>· judge {run.settings.judge_model}</span>}
           </div>
         )}
+        {excluded > 0 && (
+          <p className="text-xs text-muted-foreground">
+            {excluded} {excluded === 1 ? "person" : "people"} also came up in the search but{" "}
+            {excluded === 1 ? "has" : "have"} none of the must-have skills, so {excluded === 1 ? "isn't" : "aren't"}{" "}
+            listed or sent to the judge.
+          </p>
+        )}
       </header>
 
       {run.results.length === 0 ? (
         <Card>
           <CardContent>
             <EmptyState icon={UserSearch} title="Nobody matched">
-              No employee with a searchable resume fits these requirements. Loosen the requirements or the availability
-              filter and run again.
+              {(requirements?.must_have ?? []).length > 0
+                ? `Nobody${run.settings?.only_available ? " available" : ""} has any of the must-have skills on their profile or in their resume text. Check the requirements (a must-have can become a nice-to-have) or the availability filter, and run again.`
+                : "No employee with a searchable resume fits these requirements. Loosen the requirements or the availability filter and run again."}
             </EmptyState>
           </CardContent>
         </Card>

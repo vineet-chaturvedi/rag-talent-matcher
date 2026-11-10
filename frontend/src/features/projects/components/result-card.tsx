@@ -1,4 +1,4 @@
-import { CircleCheck, CircleHelp, LoaderCircle, TriangleAlert } from "lucide-react";
+import { CircleCheck, CircleHelp, FileText, LoaderCircle, TriangleAlert } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 
@@ -80,6 +80,7 @@ export function ResultCard({ result, judgeWeight }: { result: MatchResult; judge
           <SkillFacts
             must={facts.must_matched ?? []}
             missing={facts.must_missing ?? []}
+            named={facts.named_in_text ?? []}
             nice={facts.nice_matched ?? []}
           />
           <div className="space-y-2">
@@ -184,16 +185,33 @@ export function ResultCard({ result, judgeWeight }: { result: MatchResult; judge
   );
 }
 
-function SkillFacts({ must, missing, nice }: { must: SkillMatch[]; missing: string[]; nice: SkillMatch[] }) {
+function SkillFacts({
+  must,
+  missing,
+  named,
+  nice,
+}: {
+  must: SkillMatch[];
+  missing: string[];
+  named: string[];
+  nice: SkillMatch[];
+}) {
   return (
     <div className="space-y-3 text-sm">
       <div className="space-y-1.5">
         <p className="text-xs font-medium text-muted-foreground">
-          Must-haves: {must.length} of {must.length + missing.length} found in the profile
+          Must-haves: {must.length} of {must.length + named.length + missing.length} found in the profile
+          {named.length > 0 && `, ${named.length} named only in the resume text`}
         </p>
         <ul className="space-y-1">
           {must.map((m) => (
             <SkillLine key={m.required} skill={m} />
+          ))}
+          {named.map((name) => (
+            <li key={name} className="flex items-center gap-2 text-muted-foreground">
+              <FileText className="size-3.5 shrink-0" aria-hidden />
+              {name} <span className="text-xs">named in the resume text (no years on the profile)</span>
+            </li>
           ))}
           {missing.map((name) => (
             <li key={name} className="flex items-center gap-2 text-destructive">
