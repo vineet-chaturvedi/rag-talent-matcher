@@ -2,7 +2,8 @@
 Step 8, part 3: a MATCH RUN - retrieval, rule scoring and LLM judging for one role, saved for audit.
 
     POST /api/roles/{id}/match
-      ├─ now (~0.1 s):   retrieve (Step 7) → rule score → save run + results (status RUNNING) → reply 202
+      ├─ now (~0.1 s):   retrieve (Step 7) → keep only people with a must-have skill → rule score
+      │                  → save run + results (status RUNNING) → reply 202
       └─ background:     LLM judge the top N one by one (~35-80 s each on a CPU), saving after each
                          → mix judge score into the final score → re-rank → status COMPLETED
 
@@ -24,6 +25,7 @@ from app.db.enums import MatchRunStatus
 from app.db.models import MatchResult, MatchRun, ProjectRole, Resume, ResumeChunk, ResumeProfile
 from app.db.session import SessionLocal
 from app.llm.ollama_client import OllamaClient, OllamaError
+from app.matching.eligibility import keep_qualified, pool_size
 from app.matching.judge import JudgeError, build_dossier, judge_candidate
 from app.matching.requirements import effective_requirements
 from app.matching.retrieval import retrieve_candidates
@@ -36,11 +38,13 @@ def _now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)    # stored as naive UTC, like func.now()
 
 
-def _facts(cand) -> dict:
+def _facts(cand, named_in_text: list[str] | None = None) -> dict:
     """What retrieval found, kept with the result so the UI can show it without re-running anything."""
+    named_in_text = named_in_text or []
     return {
         "must_matched": [vars(m) for m in cand.must_matched],
-        "must_missing": cand.must_missing,
+        "must_missing": [s for s in cand.must_missing if s not in named_in_text],
+        "named_in_text": named_in_text,     # must-haves found only in the resume text (no skill row, no years)
         "nice_matched": [vars(m) for m in cand.nice_matched],
         "keyword_snippets": cand.keyword_snippets,
         "availability": {**vars(cand.availability),
@@ -55,14 +59,20 @@ async def create_match_run(session: AsyncSession, ollama: OllamaClient, settings
                            created_by_id: int | None = None) -> MatchRun:
     requirements = effective_requirements(role)
     weights = settings.score_weights
-    candidates, timings = await retrieve_candidates(session, ollama, settings, role, top_k=top_k,
+    # A wider pool, then only people with at least one must-have skill (app/matching/eligibility.py): someone
+    # with none of them is not a candidate, and must not cost a judge call. Then the best top_k.
+    candidates, timings = await retrieve_candidates(session, ollama, settings, role, top_k=pool_size(top_k),
                                                     only_available=only_available)
+    elig = await keep_qualified(session, candidates, [s["name"] for s in requirements.get("must_have", [])])
     years = dict((await session.execute(
         select(Resume.employee_id, ResumeProfile.total_experience_years)
         .join(ResumeProfile, ResumeProfile.resume_id == Resume.id)
-        .where(Resume.id.in_([c.resume_id for c in candidates]))
-    )).all()) if candidates else {}
-    scored = score_candidates(candidates, role, requirements, years, weights)
+        .where(Resume.id.in_([c.resume_id for c in elig.kept]))
+    )).all()) if elig.kept else {}
+    scored = score_candidates(elig.kept, role, requirements, years, weights)[:top_k]
+    if elig.excluded:
+        logger.info("Role %s: %d people came up in search with none of the must-have skills; left out.",
+                    role.id, elig.excluded)
 
     run = MatchRun(
         role_id=role.id, status=MatchRunStatus.RUNNING, created_by_id=created_by_id,
@@ -72,18 +82,22 @@ async def create_match_run(session: AsyncSession, ollama: OllamaClient, settings
             "judge_model": settings.judge_model if judge_top_n else None,
             "embed_model": settings.embed_model, "rrf_k": settings.rrf_k,
             "requirements": requirements, "retrieval_timings": timings,
+            "qualified": len(elig.kept),                 # people with at least one must-have skill
+            "excluded_without_must_haves": elig.excluded,
         },
     )
     run.results = [
         MatchResult(
             employee_id=cand.employee.id, resume_id=cand.resume_id, rank=i + 1,
             final_score=breakdown["rule_score"], score_breakdown=breakdown,
-            explanation={"facts": _facts(cand), "judge": None,
-                         "judge_status": "pending" if i < judge_top_n else "not_requested"},
+            explanation={"facts": _facts(cand, elig.named_in_text.get(cand.resume_id)), "judge": None,
+                         # Judge only people with some skill evidence: a 0.00 skill score can't be argued up.
+                         "judge_status": "pending" if i < judge_top_n and (
+                             breakdown["skills"] > 0 or elig.named_in_text.get(cand.resume_id)) else "not_requested"},
         )
         for i, (cand, breakdown) in enumerate(scored)
     ]
-    if judge_top_n == 0 or not run.results:
+    if not any(r.explanation["judge_status"] == "pending" for r in run.results):
         run.status, run.finished_at = MatchRunStatus.COMPLETED, _now()
     session.add(run)
     await session.commit()

@@ -56,6 +56,7 @@ class RetrievalFacts(BaseModel):
     """What retrieval found (Step 7), saved with the result so the page needs no re-run."""
     must_matched: list[SkillMatchOut] = []
     must_missing: list[str] = []
+    named_in_text: list[str] = []      # must-haves named only in the resume text (no skill row, so no years)
     nice_matched: list[SkillMatchOut] = []
     keyword_snippets: list[str] = []
     availability: AvailabilityFacts | None = None
@@ -114,6 +115,8 @@ class MatchRunSettings(BaseModel):
     embed_model: str | None = None
     requirements: Requirements | None = None
     retrieval_timings: dict | None = None
+    qualified: int | None = None                    # people with at least one must-have (older runs: None)
+    excluded_without_must_haves: int | None = None  # came up in search but had none: not listed, not judged
 
 
 class MatchResultOut(BaseModel):

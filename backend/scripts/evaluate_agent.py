@@ -39,13 +39,14 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from app.agent.loop import run_agent
-from app.agent.tools import ToolContext, mentions
+from app.agent.tools import ToolContext
 from app.config import get_settings
 from app.db.enums import ResumeStatus, UserRole
 from app.db.models import Employee, Resume, ResumeSkill, Skill, User
 from app.db.session import SessionLocal, init_db
 from app.extraction.skills import implied_by, normalize_skill
 from app.llm.ollama_client import OllamaError
+from app.matching.eligibility import mentions
 from app.llm.router import make_model_client
 from app.matching.retrieval import ESTIMATE_WEIGHT
 

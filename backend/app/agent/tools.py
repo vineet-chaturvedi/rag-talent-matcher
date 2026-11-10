@@ -12,7 +12,6 @@ recommend, but it cannot upload, delete or change anything ("least privilege").
 """
 import json
 import logging
-import re
 from dataclasses import dataclass, replace
 from datetime import date
 
@@ -23,11 +22,10 @@ from sqlalchemy.orm import selectinload
 
 from app.config import Settings
 from app.db.enums import MatchRunStatus, ResumeStatus
-from app.extraction.postprocess import normalize_for_match
-from app.extraction.skills import find_skills, is_known, normalize_skill
 from app.db.models import (Employee, MatchResult, MatchRun, Project, Resume, ResumeProfile,
                            ResumeSkill, User)
 from app.llm.ollama_client import OllamaClient
+from app.matching.eligibility import keep_qualified, pool_size
 from app.matching.requirements import normalise_skill_sections
 from app.matching.retrieval import check_availability, retrieve_candidates
 from app.matching.scoring import score_candidates
@@ -106,25 +104,6 @@ async def search_employees(ctx: ToolContext, a: SearchArgs) -> dict:
     } for m in matches]}
 
 
-# A wider pool than asked for, so that people WITH the skills are not crowded out by people the meaning search
-# finds similar but who lack every required skill (those are removed below).
-POOL_FACTOR, MIN_POOL = 4, 20
-
-
-def mentions(text: str, skill: str) -> bool:
-    """
-    Does the resume text name this skill?
-    A skill our catalogue knows is found with the same rules as extraction (every spelling, "WP" for WordPress,
-    common words like "Go" only when capitalised), so this only differs from the skill rows for resumes
-    extracted before the catalogue learned the skill. Any other skill: the term as a whole word.
-    """
-    names = normalize_skill(skill)
-    if names and is_known(names[0]):
-        return names[0] in {canonical for canonical, _, _ in find_skills(text)}
-    term = normalize_for_match(skill)
-    return bool(term) and re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", normalize_for_match(text)) is not None
-
-
 async def find_candidates(ctx: ToolContext, a: FindCandidatesArgs) -> dict:
     requirements = normalise_skill_sections({
         "must_have": [{"name": s, "min_years": None} for s in a.must_have],
@@ -136,25 +115,11 @@ async def find_candidates(ctx: ToolContext, a: FindCandidatesArgs) -> dict:
                         location=a.location, domain=[], edited_by_user=True,   # stated by a person: no grounding
                         search_summary=a.description or f"Experience with {skills}")
     role = AdHocRole("Ad-hoc request", a.description, requirements, a.allocation_percent, a.start_date, a.location)
-    pool = max(a.top_k * POOL_FACTOR, MIN_POOL)
-    candidates, _ = await retrieve_candidates(ctx.session, ctx.ollama, ctx.settings, role, top_k=pool,
-                                              only_available=a.only_available)
-
-    # Someone who has NONE of the required skills is not a candidate, however similar their resume reads
-    # (the meaning search finds "web developers" for "WordPress developer"). Exception: the resume text names
-    # the skill but it wasn't extracted as one (a skill our catalog doesn't know): kept, and said so.
-    texts = dict((await ctx.session.execute(
-        select(Resume.id, Resume.raw_text).where(Resume.id.in_([c.resume_id for c in candidates if c.must_missing]))
-    )).all()) if must and candidates else {}
-    kept, text_only, dropped = [], {}, 0
-    for c in candidates:
-        named = [s for s in c.must_missing if mentions(texts.get(c.resume_id) or "", s)]
-        if named:
-            text_only[c.resume_id] = named
-        if not must or c.must_matched or named:
-            kept.append(c)
-        else:
-            dropped += 1
+    candidates, _ = await retrieve_candidates(ctx.session, ctx.ollama, ctx.settings, role,
+                                              top_k=pool_size(a.top_k), only_available=a.only_available)
+    # Only people with at least one required skill (app/matching/eligibility.py, the same rule as match runs).
+    elig = await keep_qualified(ctx.session, candidates, must)
+    kept, text_only, dropped = elig.kept, elig.named_in_text, elig.excluded
 
     years = dict((await ctx.session.execute(
         select(Resume.employee_id, ResumeProfile.total_experience_years)
