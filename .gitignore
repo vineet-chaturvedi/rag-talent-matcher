@@ -19,3 +19,7 @@ _to_delete/
 
 # ---- Evaluation reports (Step 14): contain answers about real employees; keep locally ----
 backend/evaluation/reports/
+
+# ---- Step 15: Docker Compose settings (database password, JWT secret) and test caches ----
+/.env
+.pytest_cache/

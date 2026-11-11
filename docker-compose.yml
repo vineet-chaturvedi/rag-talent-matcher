@@ -1,0 +1,123 @@
+# The whole system in containers (Step 15e, doc 21): PostgreSQL + pgvector, migrations, the API, background
+# workers and the portal. The same images run on AWS (ECS), Google Cloud (Cloud Run / GKE) and Azure
+# (Container Apps / AKS); only the settings change.
+#
+#   cp .env.docker.example .env        then set POSTGRES_PASSWORD and JWT_SECRET in .env
+#   docker compose up -d --build       portal: http://localhost:3000   API: http://localhost:8010/docs
+#   docker compose run --rm api python -m scripts.create_user --role admin --email you@company.com --name "You"
+#   docker compose up -d --scale worker=3          more workers (each takes jobs from the same queue)
+#   docker compose --profile ollama up -d          also run Ollama in a container (else: Ollama on this PC)
+#   docker compose down                            stop (data stays in the volumes; add -v to delete it)
+#
+# Model, provider, storage and queue settings come from backend/.env (the same file as without Docker);
+# the values under `environment:` replace the ones that must differ inside containers.
+
+name: rag-talent-matcher
+
+x-backend: &backend
+  image: rag-backend:${IMAGE_TAG:-latest}
+  build:
+    context: ./backend
+  env_file:
+    - path: ./backend/.env
+      required: false
+  environment: &backend-environment
+    ENVIRONMENT: ${ENVIRONMENT:-production}
+    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-rag}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-rag}
+    DB_AUTO_MIGRATE: "false"                 # the migrate service below does it, once, before anything starts
+    VECTOR_STORE: pgvector
+    JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+    OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    UPLOAD_DIR: /app/data/uploads            # STORAGE_BACKEND=local: the shared volume below
+    CHROMA_DIR: /app/data/chroma
+    WORKER_ENABLED: "false"                  # the worker service does the background work
+    CORS_ORIGINS: '["http://localhost:3000"]'
+  extra_hosts:
+    - "host.docker.internal:host-gateway"    # reach Ollama running on this computer (Linux needs this line)
+  volumes:
+    - uploads:/app/data/uploads
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16            # PostgreSQL 16 with the pgvector extension
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-rag}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-rag}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"   # this computer only (pgAdmin, psql), never the network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:                                   # runs `alembic upgrade head` once, then exits
+    <<: *backend
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    healthcheck:
+      disable: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *backend
+    ports:
+      - "127.0.0.1:${API_PORT:-8010}:8010"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  worker:                                    # resume processing and the LLM judge (scale with --scale)
+    <<: *backend
+    command: ["python", "-m", "app.worker"]
+    stop_grace_period: 60s                   # running jobs get WORKER_SHUTDOWN_SECONDS, then are handed back
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.worker", "--healthcheck"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  frontend:
+    image: rag-frontend:${IMAGE_TAG:-latest}
+    build:
+      context: ./frontend
+      args:
+        BACKEND_URL: http://api:8010         # the API's address inside the compose network
+        HTTPS: ${HTTPS:-false}
+    ports:
+      - "${PORTAL_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ollama:                                    # optional: `docker compose --profile ollama up -d`
+    profiles: ["ollama"]                     # then set OLLAMA_BASE_URL=http://ollama:11434 in .env
+    image: ollama/ollama:latest
+    volumes:
+      - ollama:/root/.ollama                 # downloaded models (`docker compose exec ollama ollama pull ...`)
+    restart: unless-stopped
+    # NVIDIA GPU: uncomment (needs the NVIDIA Container Toolkit / Docker Desktop with WSL2 GPU support)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+volumes:
+  pgdata:
+  uploads:
+  ollama:
