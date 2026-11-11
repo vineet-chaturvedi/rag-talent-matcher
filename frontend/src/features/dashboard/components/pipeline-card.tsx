@@ -24,7 +24,7 @@ export async function PipelineCard() {
     );
   }
 
-  const { by_status, total, worker_running } = stats.data;
+  const { by_status, total, worker_running, workers_online = 0 } = stats.data;
   const busy = IN_PROGRESS.some((status) => (by_status[status] ?? 0) > 0);
 
   return (
@@ -33,7 +33,11 @@ export async function PipelineCard() {
         <CardTitle>Resume pipeline</CardTitle>
         <CardAction>
           <Badge tone={worker_running ? "success" : "warning"}>
-            {worker_running ? "worker running" : "worker stopped"}
+            {!worker_running
+              ? "no worker running"
+              : workers_online > 1
+                ? `${workers_online} workers running`
+                : "worker running"}
           </Badge>
         </CardAction>
       </CardHeader>

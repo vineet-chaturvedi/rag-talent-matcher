@@ -1029,6 +1029,10 @@ export interface components {
             reachable: boolean;
             /** Error */
             error?: string | null;
+            /** Backend */
+            backend?: string | null;
+            /** Vector Store */
+            vector_store?: string | null;
         };
         /** EducationOut */
         EducationOut: {
@@ -1260,6 +1264,19 @@ export interface components {
             status: "ok" | "degraded" | "error";
             database: components["schemas"]["DatabaseHealth"];
             ollama: components["schemas"]["OllamaHealth"];
+            infrastructure?: components["schemas"]["InfrastructureHealth"] | null;
+        };
+        /**
+         * InfrastructureHealth
+         * @description Where things run (Step 15): shown on the dashboard, so it's clear which setup this is.
+         */
+        InfrastructureHealth: {
+            /** File Storage */
+            file_storage: string;
+            /** Job Queue */
+            job_queue: string;
+            /** Workers Online */
+            workers_online: number;
         };
         /** JudgeStats */
         JudgeStats: {
@@ -1757,6 +1774,11 @@ export interface components {
             };
             /** Worker Running */
             worker_running: boolean;
+            /**
+             * Workers Online
+             * @default 0
+             */
+            workers_online: number;
             /**
              * Vector Count
              * @default 0

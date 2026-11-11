@@ -53,6 +53,9 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Docker images (frontend/Dockerfile) build a self-contained server: .next/standalone/server.js with only
+  // the node_modules it needs. `npm run build` / `npm start` on a laptop are unchanged.
+  output: process.env.NEXT_OUTPUT === "standalone" ? "standalone" : undefined,
   cacheComponents: true,
   partialPrefetching: true,
   reactCompiler: true,
