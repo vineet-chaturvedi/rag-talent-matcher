@@ -1,10 +1,13 @@
 """
 Shared foundation for all database models.
 """
+import logging
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, MetaData, func
+from sqlalchemy import DateTime, Enum, MetaData, String, event, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+logger = logging.getLogger(__name__)
 
 # Predictable names for indexes/constraints, e.g. "fk_resumes_employee_id_employees".
 # Without this, databases invent random names, which makes future migrations (Alembic) painful.
@@ -45,3 +48,23 @@ def enum_column(enum_cls: type) -> Enum:
         values_callable=lambda e: [member.value for member in e],
         validate_strings=True,
     )
+
+# --------------------------------------------------------------------------- the same behaviour on every database
+@event.listens_for(Base, "before_insert", propagate=True)
+@event.listens_for(Base, "before_update", propagate=True)
+def _fit_strings(_mapper, _connection, target) -> None:
+    """
+    Text longer than its column (String(n)) is cut to fit, with a warning. SQLite ignores the length, PostgreSQL
+    refuses the whole row: without this, an unusually long job title written by the LLM would work on a laptop
+    and fail in production. Now both databases store the same thing.
+    """
+    for column in target.__table__.columns:
+        length = getattr(column.type, "length", None)
+        if (not length or not isinstance(column.type, String) or isinstance(column.type, Enum)
+                or column.key not in target.__dict__):
+            continue
+        value = target.__dict__[column.key]
+        if isinstance(value, str) and len(value) > length:
+            logger.warning("%s.%s: %d characters cut to the column's %d", target.__table__.name, column.key,
+                           len(value), length)
+            setattr(target, column.key, value[:length])

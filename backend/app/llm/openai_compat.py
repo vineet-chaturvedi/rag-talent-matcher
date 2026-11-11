@@ -7,6 +7,8 @@ Used for (prefix in .env -> service):
   gemini/<model>   Google Gemini (its OpenAI-compatible endpoint)          GEMINI_API_KEY
   compat/<model>   any other OpenAI-compatible server: vLLM, LM Studio, OpenRouter, Groq, Mistral, DeepSeek,
                    Together, a company LLM gateway ...                    COMPAT_BASE_URL, COMPAT_API_KEY
+  vertex/<model>   Google Vertex AI's OpenAI-compatible endpoint: Gemini, and partner/open models (Llama ...)
+                   VERTEX_PROJECT, VERTEX_LOCATION; Google credentials (app/llm/google_auth.py), no key in .env
 
 It speaks the app's common (Ollama-shaped) format to the rest of the code and translates:
   messages      tool calls get ids here (Ollama's format has none; OpenAI links each tool result to its call by id)
@@ -94,9 +96,11 @@ _FINISH = {"length": "length", "stop": "stop", "tool_calls": "stop", "content_fi
 
 
 class OpenAICompatProvider:
-    def __init__(self, service: str, client):
+    def __init__(self, service: str, client, token=None, model_prefix: str = ""):
         self.service = service            # e.g. "OpenAI", "Gemini": used in messages
         self._client = client
+        self._token = token               # GoogleToken for Vertex: a fresh OAuth token before each request
+        self._model_prefix = model_prefix  # Vertex names models "<publisher>/<model>": "google/" by default
         self._quirks: dict[str, set[str]] = {}   # model -> parameters it refused
 
     # ----------------------------------------------------------------- construction
@@ -128,8 +132,21 @@ class OpenAICompatProvider:
         return cls(f"OpenAI-compatible server {base_url}",
                    _sdk().AsyncOpenAI(api_key=api_key or "not-needed", base_url=base_url, timeout=timeout))
 
+    @classmethod
+    def vertex(cls, base_url: str, timeout: float, token) -> "OpenAICompatProvider":
+        """base_url: https://<location>-aiplatform.googleapis.com/v1/projects/<p>/locations/<location>/endpoints/openapi"""
+        return cls("Vertex AI", _sdk().AsyncOpenAI(api_key="set-per-request", base_url=base_url, timeout=timeout),
+                   token=token, model_prefix="google/")
+
     async def close(self) -> None:
         await self._client.close()
+
+    async def _authorize(self) -> None:
+        if self._token is not None:
+            self._client.api_key = await self._token.get()     # the SDK reads api_key on every request
+
+    def _model(self, model: str) -> str:
+        return model if not self._model_prefix or "/" in model else self._model_prefix + model
 
     # ----------------------------------------------------------------- request building
     def _params(self, model: str, messages, temperature, json_schema, num_predict, tools, stream) -> dict:
@@ -177,6 +194,8 @@ class OpenAICompatProvider:
     # ----------------------------------------------------------------- chat
     async def chat(self, messages, model, temperature=0.0, num_ctx=None, json_schema=None, num_predict=None,
                    tools=None) -> dict[str, Any]:
+        await self._authorize()
+        model = self._model(model)
         for _ in range(5):
             params = self._params(model, messages, temperature, json_schema, num_predict, tools, stream=False)
             try:
@@ -207,6 +226,8 @@ class OpenAICompatProvider:
 
     async def chat_stream(self, messages, model, tools=None, temperature=0.0, num_ctx=None,
                           num_predict=None) -> AsyncIterator[dict[str, Any]]:
+        await self._authorize()
+        model = self._model(model)
         for _ in range(5):
             params = self._params(model, messages, temperature, None, num_predict, tools, stream=True)
             try:
@@ -251,7 +272,8 @@ class OpenAICompatProvider:
     # ----------------------------------------------------------------- embeddings
     async def embed(self, texts: list[str], model: str, kind: str = "document",
                     dimensions: int | None = None) -> list[list[float]]:
-        params: dict[str, Any] = {"model": model, "input": texts}
+        await self._authorize()
+        params: dict[str, Any] = {"model": self._model(model), "input": texts}
         if dimensions:
             params["dimensions"] = dimensions   # text-embedding-3-*: shorter vectors, cheaper storage
         try:

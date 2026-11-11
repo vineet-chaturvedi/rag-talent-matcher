@@ -1,5 +1,8 @@
 """
-Provider: Anthropic's Messages API (Claude).            .env: anthropic/<model>, ANTHROPIC_API_KEY
+Provider: Anthropic's Messages API (Claude).
+  anthropic/<model>          Anthropic directly                         ANTHROPIC_API_KEY
+  vertex/claude-<model>      Claude on Google Vertex AI (same API)      VERTEX_PROJECT, Google credentials
+                             e.g. vertex/claude-sonnet-4-5@20250929
 
 Translation between the app's common (Ollama-shaped) format and Claude's:
   system messages   -> the separate `system` parameter
@@ -32,17 +35,17 @@ def _sdk():
     return anthropic
 
 
-def to_error(exc: Exception) -> LLMError:
+def to_error(exc: Exception, service: str = "Anthropic") -> LLMError:
     anthropic = _sdk()
     if isinstance(exc, LLMError):
         return exc
     if isinstance(exc, (anthropic.APIConnectionError, anthropic.APITimeoutError)):
-        return LLMError(f"Cannot reach Anthropic: {exc}")
+        return LLMError(f"Cannot reach {service}: {exc}")
     if isinstance(exc, anthropic.APIStatusError):
         code = exc.status_code
         retryable = code in (401, 403, 404, 408, 409, 429) or code >= 500   # setup, limits, 529 overloaded
-        return LLMError(f"Anthropic returned {code}: {exc.message}", retryable=retryable)
-    return LLMError(f"Anthropic: {type(exc).__name__}: {exc}")
+        return LLMError(f"{service} returned {code}: {exc.message}", retryable=retryable)
+    return LLMError(f"{service}: {type(exc).__name__}: {exc}")
 
 
 def to_anthropic(messages: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
@@ -97,14 +100,27 @@ def to_anthropic_tools(tools: list[dict] | None) -> list[dict]:
 
 
 class AnthropicProvider:
-    service = "Anthropic"
+    def __init__(self, client, default_max_tokens: int, service: str = "Anthropic"):
+        self._client = client
+        self._max_tokens = default_max_tokens
+        self.service = service
+        self._no_temperature: set[str] = set()
 
-    def __init__(self, api_key: str | None, base_url: str | None, timeout: float, default_max_tokens: int):
+    @classmethod
+    def direct(cls, api_key: str | None, base_url: str | None, timeout: float,
+               default_max_tokens: int) -> "AnthropicProvider":
         if not api_key:
             raise LLMError("ANTHROPIC_API_KEY is not set in backend/.env")
-        self._client = _sdk().AsyncAnthropic(api_key=api_key, base_url=base_url or None, timeout=timeout)
-        self._max_tokens = default_max_tokens
-        self._no_temperature: set[str] = set()
+        return cls(_sdk().AsyncAnthropic(api_key=api_key, base_url=base_url or None, timeout=timeout),
+                   default_max_tokens)
+
+    @classmethod
+    def vertex(cls, project: str, region: str, credentials, base_url: str | None, timeout: float,
+               default_max_tokens: int) -> "AnthropicProvider":
+        """Claude on Vertex AI: the SDK puts the model in the URL and refreshes the Google token itself."""
+        client = _sdk().AsyncAnthropicVertex(project_id=project, region=region, credentials=credentials,
+                                             base_url=base_url or None, timeout=timeout)
+        return cls(client, default_max_tokens, service="Vertex AI (Claude)")
 
     async def close(self) -> None:
         await self._client.close()
@@ -152,7 +168,7 @@ class AnthropicProvider:
         if isinstance(exc, _sdk().BadRequestError) and "temperature" in str(exc).lower() and "extra_body" in params:
             self._no_temperature.add(model)
             params.pop("extra_body")
-            logger.info("Anthropic model %s refused temperature; asking again without it.", model)
+            logger.info("%s model %s refused temperature; asking again without it.", self.service, model)
             return True
         return False
 
@@ -167,9 +183,9 @@ class AnthropicProvider:
                     raise
                 resp = await self._client.messages.create(**params)
         except Exception as exc:
-            raise to_error(exc) from exc
+            raise to_error(exc, self.service) from exc
         out = self._convert(resp, model, structured=bool(json_schema))
-        logger.info("chat <- Anthropic model=%s prompt_tokens=%s output_tokens=%s", model,
+        logger.info("chat <- %s model=%s prompt_tokens=%s output_tokens=%s", self.service, model,
                     out["prompt_eval_count"], out["eval_count"])
         return out
 
@@ -187,7 +203,7 @@ class AnthropicProvider:
             except Exception as exc:
                 if attempt == 1 and self._retry_without_temperature(model, exc, params):
                     continue
-                raise to_error(exc) from exc
+                raise to_error(exc, self.service) from exc
         out = self._convert(final, model, structured=False)
         if out["message"].get("tool_calls"):
             yield {"message": {"role": "assistant", "content": "", "tool_calls": out["message"]["tool_calls"]},

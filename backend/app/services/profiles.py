@@ -108,5 +108,6 @@ async def save_profile(session: AsyncSession, resume_id: int, outcome: Extractio
     resume.attempts = 0
     resume.error_message = None
     resume.processed_at = func.now()
+    resume.lease_expires_at = None          # the stage is done: the worker's claim ends
     await session.commit()
     return True

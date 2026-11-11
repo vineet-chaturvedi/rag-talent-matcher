@@ -7,7 +7,6 @@ Semantic search: a question in plain words -> the employees whose resume chunks 
   4. group chunks by employee            (one employee can match through several chunks)
   5. rank employees by their best chunk  (Step 7 improves this with keywords, filters and fusion)
 """
-import asyncio
 import time
 from dataclasses import dataclass, field
 
@@ -35,7 +34,7 @@ async def semantic_search(
     started = time.perf_counter()
     vector = await embed_query(ollama, query, embed_model)
     embedded = time.perf_counter()
-    hits = await asyncio.to_thread(store.query, vector, chunk_pool)
+    hits = await store.query(vector, chunk_pool)
     searched = time.perf_counter()
 
     # Only chunks from resumes that are still current and fully processed count.

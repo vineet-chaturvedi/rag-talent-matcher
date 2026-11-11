@@ -5,18 +5,12 @@ from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import SessionLocal
-from app.ingestion.worker import IngestionWorker
 from app.llm.router import ModelRouter
 
 
 def get_ollama(request: Request) -> ModelRouter:
     # The client was created once at startup (see lifespan in main.py) and stored on app.state.
     return request.app.state.ollama
-
-
-def get_worker(request: Request) -> IngestionWorker | None:
-    # None when WORKER_ENABLED=false
-    return request.app.state.worker
 
 
 async def get_db() -> AsyncIterator[AsyncSession]:

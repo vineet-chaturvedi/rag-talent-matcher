@@ -4,8 +4,10 @@ Embedding-only providers with their own APIs (plain HTTP, no SDK needed):
   voyage/<model>    Voyage AI (Anthropic's recommended embeddings), e.g. voyage/voyage-3.5       VOYAGE_API_KEY
   cohere/<model>    Cohere, e.g. cohere/embed-v4.0, cohere/embed-multilingual-v3.0            COHERE_API_KEY
   gemini/<model>    Google, e.g. gemini/gemini-embedding-001 (native API, so the task type is sent) GEMINI_API_KEY
+  vertex/<model>    Google Vertex AI, e.g. vertex/gemini-embedding-001, vertex/text-embedding-005,
+                    vertex/text-multilingual-embedding-002        VERTEX_PROJECT + Google credentials (no key)
 
-All three take the KIND of text as a parameter ("query" vs "document"), so no text prompts are added for them
+All of them take the KIND of text as a parameter ("query" vs "document"), so no text prompts are added for them
 (app/llm/models.py lists them as "no prompts"). OpenAI and Azure embeddings go through openai_compat.py.
 Rate limits (429) and outages (5xx) are retried a few times with a growing pause before giving up.
 """
@@ -111,3 +113,33 @@ class GeminiEmbedder(_HttpEmbedder):
         data = await self._post(f"{self._base}/{name}:batchEmbedContents", {"x-goog-api-key": self._key},
                                 {"requests": requests})
         return [e["values"] for e in data["embeddings"]]
+
+
+class VertexEmbedder(_HttpEmbedder):
+    """Vertex AI text embeddings (the :predict API). gemini-embedding-* takes one text per request; the
+    text-embedding / text-multilingual-embedding models up to 250 (we send 32: their token limit per request)."""
+    service = "Vertex AI"
+    CONCURRENCY = 8
+
+    def __init__(self, base_url: str, token, timeout: float):
+        super().__init__(timeout)
+        self._base, self._token = base_url.rstrip("/"), token     # .../v1/projects/<p>/locations/<location>
+
+    async def embed(self, texts: list[str], model: str, kind: str = "document",
+                    dimensions: int | None = None) -> list[list[float]]:
+        url = f"{self._base}/publishers/google/models/{model}:predict"
+        task = "RETRIEVAL_QUERY" if kind == "query" else "RETRIEVAL_DOCUMENT"
+        batch = 1 if model.startswith("gemini-embedding") else 32
+        limit = asyncio.Semaphore(self.CONCURRENCY)
+
+        async def one(part: list[str]) -> list[list[float]]:
+            payload: dict = {"instances": [{"content": t, "task_type": task} for t in part]}
+            if dimensions:
+                payload["parameters"] = {"outputDimensionality": dimensions}
+            async with limit:
+                headers = {"Authorization": f"Bearer {await self._token.get()}"}
+                data = await self._post(url, headers, payload)
+            return [p["embeddings"]["values"] for p in data["predictions"]]
+
+        parts = await asyncio.gather(*(one(texts[i:i + batch]) for i in range(0, len(texts), batch)))
+        return [vector for part in parts for vector in part]

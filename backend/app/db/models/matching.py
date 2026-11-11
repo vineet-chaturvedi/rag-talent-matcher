@@ -25,6 +25,10 @@ class MatchRun(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
     error_message: Mapped[str | None] = mapped_column(Text)
+    # The LLM judge runs in a background worker (Step 15, app/jobs): the worker judging it holds a lease; a run
+    # whose worker died is picked up by another one (attempts counts the tries, to give up eventually).
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime)
+    attempts: Mapped[int] = mapped_column(default=0, server_default="0")
 
     role: Mapped["ProjectRole"] = relationship(back_populates="match_runs")
     results: Mapped[list["MatchResult"]] = relationship(

@@ -60,18 +60,63 @@ class Settings(BaseSettings):
     voyage_base_url: str | None = None       # empty = https://api.voyageai.com/v1/embeddings
     cohere_api_key: str | None = None
     cohere_base_url: str | None = None       # empty = https://api.cohere.com/v2/embed
+    # Amazon Bedrock (bedrock/<model id>): credentials from boto3's standard chain (IAM role, AWS_PROFILE ...)
+    aws_region: str | None = None            # e.g. ap-south-1 (Mumbai); empty = AWS_REGION / the profile's region
+    aws_profile: str | None = None           # a named profile from ~/.aws (laptops); empty on AWS (IAM role)
+    bedrock_endpoint_url: str | None = None  # a VPC (PrivateLink) endpoint; empty = the public regional endpoint
+    bedrock_max_tokens: int = 4096           # answer limit when a task sets none (some models default to 512)
+    # Google Vertex AI (vertex/<model>): credentials from Application Default Credentials (service account)
+    vertex_project: str | None = None        # empty = GOOGLE_CLOUD_PROJECT / the credentials' project
+    vertex_location: str = "us-central1"     # e.g. asia-south1 (Mumbai), europe-west4, or global
+    vertex_claude_location: str | None = None   # Claude's region if it differs (e.g. us-east5, europe-west1)
+    vertex_base_url: str | None = None       # replaces https://<location>-aiplatform.googleapis.com/v1
 
     # ---- Database ----
+    # sqlite+aiosqlite:///./data/app.db (one machine) | postgresql+asyncpg://user:password@host:5432/db (production)
     database_url: str = "sqlite+aiosqlite:///./data/app.db"
     db_echo: bool = False
+    db_auto_migrate: bool = True             # run migrations at startup; false = `alembic upgrade head` per release
+    db_pool_size: int = 10                   # PostgreSQL: connections kept open per process
+    db_max_overflow: int = 20                # PostgreSQL: extra connections under load
+    db_pool_timeout_seconds: float = 30.0    # PostgreSQL: wait this long for a free connection, then fail
+    db_statement_timeout_ms: int = 0         # PostgreSQL: cancel any query running longer (0 = no limit)
 
     # ---- Uploads & ingestion (Step 4) ----
-    upload_dir: str = "./data/uploads"
+    # Where resume files are kept (app/storage): local = UPLOAD_DIR; s3 / gcs / azure = a private bucket
+    storage_backend: Literal["local", "s3", "gcs", "azure"] = "local"
+    storage_prefix: str = "resumes/"         # folder inside the bucket / container (cloud backends)
+    upload_dir: str = "./data/uploads"       # local backend
+    s3_bucket: str | None = None
+    s3_region: str | None = None             # empty = AWS_REGION
+    s3_endpoint_url: str | None = None       # S3-compatible stores (MinIO, R2); empty = AWS
+    s3_kms_key_id: str | None = None         # your KMS key (SSE-KMS); empty = S3-managed encryption (SSE-S3)
+    gcs_bucket: str | None = None
+    gcs_kms_key_name: str | None = None      # projects/../keyRings/../cryptoKeys/.. (CMEK); empty = Google-managed
+    azure_storage_container: str | None = None
+    azure_storage_account_url: str | None = None        # https://<account>.blob.core.windows.net (managed identity)
+    azure_storage_connection_string: str | None = None  # alternative (a secret: development, Azurite)
     max_upload_mb: int = 25              # per file (Word files with embedded fonts reach 12+ MB, doc 18)
     max_files_per_batch: int = 200       # per bulk-upload request
-    worker_enabled: bool = True          # background processing on/off
-    worker_poll_seconds: float = 5.0     # how often an idle worker re-checks the queue
-    worker_max_attempts: int = 3         # retries for unexpected errors
+    # Background jobs (app/jobs): resume processing and the LLM judge.
+    queue_backend: Literal["local", "sqs", "pubsub", "servicebus"] = "local"   # local = the database is the queue
+    worker_enabled: bool = True          # run a worker inside the API process (one machine); false = separate
+                                         # worker processes only (python -m app.worker)
+    worker_concurrency: int = 1          # jobs one worker runs at once (an LLM on a CPU: 1; GPU / cloud models: more)
+    worker_poll_seconds: float = 5.0     # how long an idle worker waits for a job before looking again
+    worker_max_attempts: int = 3         # retries for unexpected errors (and for workers dying mid-job)
+    worker_lease_seconds: float = 300.0  # a job's claim; renewed every third of it while the job runs
+    worker_sweep_seconds: float = 60.0   # how often a worker recovers jobs whose worker died
+    worker_redispatch_seconds: float = 900.0   # message broker: re-send jobs waiting this long (lost messages)
+    worker_shutdown_seconds: float = 30.0      # on stop, running jobs get this long to finish, then are handed back
+    sqs_queue_url: str | None = None     # QUEUE_BACKEND=sqs: https://sqs.<region>.amazonaws.com/<account>/<queue>
+    sqs_region: str | None = None        # empty = AWS_REGION
+    sqs_endpoint_url: str | None = None  # a VPC endpoint or a local emulator; empty = AWS
+    pubsub_topic: str | None = None      # QUEUE_BACKEND=pubsub: "resume-jobs" or projects/<p>/topics/resume-jobs
+    pubsub_subscription: str | None = None   # a PULL subscription of that topic
+    pubsub_project: str | None = None    # empty = GOOGLE_CLOUD_PROJECT
+    servicebus_queue: str | None = None  # QUEUE_BACKEND=servicebus: the queue name
+    servicebus_namespace: str | None = None   # <namespace>.servicebus.windows.net (managed identity)
+    servicebus_connection_string: str | None = None   # alternative (a secret: development)
     min_chars_per_page: int = 100        # less text than this per PDF page = probably a scanned image
     ollama_retry_seconds: float = 30.0   # if Ollama is down, the worker waits this long before trying again
 
@@ -81,6 +126,8 @@ class Settings(BaseSettings):
     extraction_max_input_chars: int = 16000    # ~4,000 tokens per model call; longer resumes are read in parts
 
     # ---- Chunking, embeddings & vector store (Step 6) ----
+    # auto = pgvector when the database is PostgreSQL (vectors next to the data), ChromaDB with SQLite
+    vector_store: Literal["auto", "chroma", "pgvector"] = "auto"
     chroma_dir: str = "./data/chroma"               # ChromaDB's files (git-ignored, rebuildable)
     chroma_collection: str = "resume_chunks"
     chunk_max_chars: int = 1200                     # ~300 tokens: one focused topic per chunk

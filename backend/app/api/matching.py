@@ -1,12 +1,11 @@
 """
 Match runs (Step 8):
-  POST /api/roles/{id}/match         start a run: retrieve + rule-score now, LLM-judge the top N in the background
+  POST /api/roles/{id}/match         start a run: retrieve + rule-score now, LLM-judge the top N in a background
+                                     worker (a "judge" job, app/jobs)
   GET  /api/match-runs/{id}          the run with its ranked results (poll this while status is "running")
   GET  /api/roles/{id}/match-runs    earlier runs for a role (history / audit)
 """
-import asyncio
-
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -14,10 +13,11 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import get_db, get_ollama
 from app.auth.dependencies import get_current_user
 from app.config import Settings, get_settings
-from app.db.enums import FeedbackRating
+from app.db.enums import FeedbackRating, MatchRunStatus
 from app.db.models import Feedback, MatchResult, MatchRun, ProjectRole, User
+from app.jobs import Job, dispatch
 from app.llm.ollama_client import OllamaClient, OllamaError
-from app.matching.runner import create_match_run, judge_run
+from app.matching.runner import create_match_run
 from app.schemas.feedback import MyFeedback
 from app.schemas.matching import MatchRequest, MatchResultOut, MatchRunOut, MatchRunSummary
 
@@ -69,7 +69,7 @@ def _to_out(run: MatchRun, mine: dict | None = None, counts: dict | None = None)
 
 @router.post("/api/roles/{role_id}/match", response_model=MatchRunOut, status_code=202)
 async def start_match(
-    role_id: int, body: MatchRequest, request: Request,
+    role_id: int, body: MatchRequest,
     db: AsyncSession = Depends(get_db),
     ollama: OllamaClient = Depends(get_ollama),
     settings: Settings = Depends(get_settings),
@@ -87,11 +87,9 @@ async def start_match(
     except OllamaError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
 
-    if run.status == "running":
-        # Judge in the background; keep a reference so the task isn't garbage-collected mid-run.
-        task = asyncio.create_task(judge_run(run.id, ollama, settings), name=f"judge-run-{run.id}")
-        request.app.state.match_tasks.add(task)
-        task.add_done_callback(request.app.state.match_tasks.discard)
+    if run.status == MatchRunStatus.RUNNING:
+        # The LLM judge runs in a background worker (app/jobs); the page polls the run for progress.
+        await dispatch([Job("judge", run.id)])
     return _to_out(await _load_run(db, run.id))
 
 

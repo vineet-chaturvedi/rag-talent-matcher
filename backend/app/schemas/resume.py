@@ -61,5 +61,6 @@ class BulkUploadResult(BaseModel):
 class QueueStats(BaseModel):
     total: int
     by_status: dict[str, int]
-    worker_running: bool
-    vector_count: int = 0         # chunks stored in ChromaDB (Step 6)
+    worker_running: bool          # at least one background worker is alive (this process or separate ones)
+    workers_online: int = 0       # worker processes that reported in the last 90 s (Step 15)
+    vector_count: int = 0         # chunks in the vector store (Step 6)

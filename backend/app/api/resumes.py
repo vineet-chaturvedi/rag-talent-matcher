@@ -12,25 +12,24 @@ Resume endpoints:
   POST   /api/resumes/reembed          rebuild all chunks + vectors (after a chunking/embedding change)
   DELETE /api/resumes/{id}             delete one resume version (file + rows)
 """
-import asyncio
 from datetime import date
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
-from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_db, get_worker
+from app.api.deps import get_db
 from app.auth.dependencies import require_admin
 from app.config import Settings, get_settings
 from app.db.enums import ResumeStatus
 from app.db.models import Employee, Resume, ResumeSkill, User
 from app.extraction.postprocess import ground_education
 from app.ingestion.storage import InvalidFileError
-from app.ingestion.worker import IngestionWorker
+from app.jobs import Job, dispatch, dispatch_waiting
+from app.jobs.worker import workers_online
 from app.rag.vector_store import get_vector_store
+from app.storage import FileMissingError, StorageError, get_storage
 from app.schemas.profile import ProfileOut
 from app.schemas.resume import (
     BulkUploadResult, QueueStats, RequeueResult, ResumeDetail, ResumeListItem, ResumeOut, UploadItemResult,
@@ -45,9 +44,9 @@ router = APIRouter(tags=["resumes"])
 PREVIEW_CHARS = 1500
 
 
-def _wake(worker: IngestionWorker | None) -> None:
-    if worker is not None:
-        worker.notify()
+async def _ingest(*resume_ids: int) -> None:
+    """Hand new or re-queued resumes to the background workers (after the database commit)."""
+    await dispatch(Job("ingest", i) for i in resume_ids)
 
 
 @router.post("/api/employees/{employee_id}/resumes", response_model=ResumeOut, status_code=status.HTTP_201_CREATED)
@@ -56,7 +55,6 @@ async def upload_resume(
     file: UploadFile = File(..., description="PDF, DOCX or DOC"),
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
-    worker: IngestionWorker | None = Depends(get_worker),
     user: User = Depends(require_admin),
 ):
     employee = await db.get(Employee, employee_id)
@@ -70,8 +68,10 @@ async def upload_resume(
         raise HTTPException(status_code=400, detail=str(exc))
     except DuplicateResumeError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
+    except StorageError as exc:
+        raise HTTPException(status_code=503, detail=f"The file could not be stored: {exc}")
 
-    _wake(worker)
+    await _ingest(resume.id)
     return resume
 
 
@@ -80,7 +80,6 @@ async def bulk_upload(
     files: list[UploadFile] = File(..., description="Many PDF/DOCX/DOC files, named like EMP-1001_anything.pdf or starting with the employee's name"),
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
-    worker: IngestionWorker | None = Depends(get_worker),
     user: User = Depends(require_admin),
 ):
     if len(files) > settings.max_files_per_batch:
@@ -91,8 +90,12 @@ async def bulk_upload(
     employees = {e.employee_code.upper(): e for e in all_employees}
 
     items: list[UploadItemResult] = []
+    storage_down: str | None = None
     for upload in files:
         name = upload.filename or ""
+        if storage_down:                     # the store failed: the rest would fail the same way
+            items.append(UploadItemResult(filename=name, ok=False, employee_code=None, error=storage_down))
+            continue
         code = employee_code_from_filename(name)
         employee = employees.get(code or "")
         if employee is None:
@@ -108,9 +111,13 @@ async def bulk_upload(
         except (InvalidFileError, DuplicateResumeError) as exc:
             items.append(UploadItemResult(filename=name, ok=False, employee_code=code, error=str(exc)))
             continue
+        except StorageError as exc:
+            storage_down = f"Not stored: file storage is unavailable ({exc})"
+            items.append(UploadItemResult(filename=name, ok=False, employee_code=code, error=storage_down))
+            continue
         items.append(UploadItemResult(filename=name, ok=True, resume_id=resume.id, employee_code=code))
 
-    _wake(worker)
+    await _ingest(*(i.resume_id for i in items if i.ok))
     uploaded = sum(1 for i in items if i.ok)
     return BulkUploadResult(uploaded=uploaded, failed=len(items) - uploaded, items=items)
 
@@ -140,31 +147,29 @@ async def list_resumes(
 @router.get("/api/resumes/stats", response_model=QueueStats)
 async def queue_stats(
     db: AsyncSession = Depends(get_db),
-    worker: IngestionWorker | None = Depends(get_worker),
 ):
     rows = (await db.execute(
         select(Resume.status, func.count()).where(Resume.is_current.is_(True)).group_by(Resume.status)
     )).all()
     by_status = {s.value: 0 for s in ResumeStatus} | {s: n for s, n in rows}
-    return QueueStats(total=sum(by_status.values()), by_status=by_status,
-                      worker_running=worker is not None and worker.running,
-                      vector_count=await asyncio.to_thread(get_vector_store().count))
+    online = await workers_online()          # worker processes anywhere (this one or separate ones)
+    return QueueStats(total=sum(by_status.values()), by_status=by_status, worker_running=online > 0,
+                      workers_online=online, vector_count=await get_vector_store().count())
 
 
 @router.post("/api/resumes/reextract", response_model=RequeueResult, dependencies=[Depends(require_admin)])
 async def reextract_all(
     db: AsyncSession = Depends(get_db),
-    worker: IngestionWorker | None = Depends(get_worker),
 ):
     count = await requeue_for_extraction(db)
-    _wake(worker)
+    await dispatch_waiting()
     return RequeueResult(requeued=count)
 
 
 @router.post("/api/resumes/reembed", response_model=RequeueResult, dependencies=[Depends(require_admin)])
-async def reembed_all(worker: IngestionWorker | None = Depends(get_worker)):
+async def reembed_all():
     count = await requeue_for_embedding()
-    _wake(worker)
+    await dispatch_waiting()
     return RequeueResult(requeued=count)
 
 
@@ -186,9 +191,8 @@ async def get_resume(resume_id: int, full_text: bool = False, db: AsyncSession =
 
 
 @router.get("/api/resumes/{resume_id}/file", dependencies=[Depends(require_admin)],
-            response_class=FileResponse, responses={200: {"content": {"application/pdf": {}}}})
-async def get_resume_file(resume_id: int, download: bool = False, db: AsyncSession = Depends(get_db),
-                          settings: Settings = Depends(get_settings)):
+            response_class=Response, responses={200: {"content": {"application/pdf": {}}}})
+async def get_resume_file(resume_id: int, download: bool = False, db: AsyncSession = Depends(get_db)):
     """
     The original file, exactly as uploaded (every version is kept, not only the current one).
     Admins only: the original holds the contact details that the profile, the search index and the agent
@@ -198,19 +202,26 @@ async def get_resume_file(resume_id: int, download: bool = False, db: AsyncSessi
     resume = await db.get(Resume, resume_id)
     if resume is None:
         raise HTTPException(status_code=404, detail="Resume not found")
-    upload_root = Path(settings.upload_dir).resolve()
-    path = Path(resume.stored_path).resolve()
-    # The path comes from our own database, but check anyway that it points inside the upload folder.
-    if not path.is_relative_to(upload_root) or not path.is_file():
-        raise HTTPException(status_code=404, detail="The file of this resume is missing from the upload folder.")
+    try:
+        # Streamed through the API (never a public or pre-signed link): only signed-in admins get the file.
+        data = await get_storage().get(resume.stored_path)
+    except FileMissingError:
+        raise HTTPException(status_code=404, detail="The file of this resume is missing from storage.")
+    except StorageError as exc:
+        raise HTTPException(status_code=503, detail=f"File storage is unavailable: {exc}")
     inline = resume.mime_type == "application/pdf" and not download
-    return FileResponse(
-        path,
-        media_type=resume.mime_type,
-        filename=resume.original_filename,          # the name the admin uploaded, not our storage name
-        content_disposition_type="inline" if inline else "attachment",
-        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
-    )
+    return Response(data, media_type=resume.mime_type, headers={
+        # the name the admin uploaded, not our storage name (RFC 6266 / 5987: any language, safely quoted)
+        "Content-Disposition": content_disposition("inline" if inline else "attachment", resume.original_filename),
+        "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
+
+
+def content_disposition(kind: str, filename: str) -> str:
+    """inline/attachment with an ASCII fallback name and the exact UTF-8 name."""
+    from urllib.parse import quote
+
+    fallback = "".join(c if 32 <= ord(c) < 127 and c not in '"\\' else "_" for c in filename) or "resume"
+    return f'{kind}; filename="{fallback}"; filename*=UTF-8\'\'{quote(filename, safe="")}'
 
 
 @router.get("/api/resumes/{resume_id}/profile", response_model=ProfileOut)
@@ -271,7 +282,6 @@ async def get_profile(resume_id: int, db: AsyncSession = Depends(get_db)):
 async def retry(
     resume_id: int,
     db: AsyncSession = Depends(get_db),
-    worker: IngestionWorker | None = Depends(get_worker),
 ):
     resume = await db.get(Resume, resume_id)
     if resume is None:
@@ -279,7 +289,7 @@ async def retry(
     if resume.status != ResumeStatus.FAILED:
         raise HTTPException(status_code=409, detail=f"Only failed resumes can be retried (status is '{resume.status}').")
     resume = await retry_resume(db, resume)
-    _wake(worker)
+    await _ingest(resume.id)
     return resume
 
 

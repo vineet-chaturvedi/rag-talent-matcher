@@ -1,5 +1,5 @@
 """
-Checking uploaded resume files and storing them on disk.
+Checking uploaded resume files, and naming them for storage (where they are kept: app/storage).
 
 Pure functions: no database, no web framework. That keeps them easy to read and to test.
 """
@@ -64,18 +64,7 @@ def safe_folder_name(value: str) -> str:
     return cleaned or "unknown"
 
 
-def build_storage_path(upload_dir: Path, employee_code: str, file: ValidatedFile) -> Path:
-    """data/uploads/<EMPLOYEE_CODE>/<first 16 chars of sha256>.<ext>  (we never reuse the user's filename)."""
-    return upload_dir / safe_folder_name(employee_code) / f"{file.sha256[:16]}{file.extension}"
-
-
-def save_file(path: Path, data: bytes) -> None:
-    """Write to a temporary '.part' file first, then rename: a crash never leaves a half-written resume."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_name(path.name + ".part")
-    temp.write_bytes(data)
-    temp.replace(path)  # rename is atomic: the file either fully exists or not at all
-
-
-def delete_file(path: str | Path) -> None:
-    Path(path).unlink(missing_ok=True)
+def storage_key(employee_code: str, file: ValidatedFile) -> str:
+    """<EMPLOYEE_CODE>/<first 16 chars of sha256>.<ext>, the same on every storage backend.
+    The user's file name is never used (it is kept in the database, for downloads)."""
+    return f"{safe_folder_name(employee_code)}/{file.sha256[:16]}{file.extension}"

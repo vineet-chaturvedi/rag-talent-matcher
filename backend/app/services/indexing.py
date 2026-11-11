@@ -2,7 +2,6 @@
 Indexing one resume: build chunks -> embed them -> store vectors in ChromaDB -> store chunk rows in SQLite.
 Called by the worker's "embed" stage (status EXTRACTED -> EMBEDDING -> READY).
 """
-import asyncio
 import logging
 import uuid
 from datetime import date
@@ -67,7 +66,7 @@ async def index_resume(resume_id: int, ollama: OllamaClient, settings: Settings)
     # 3. Embed (Ollama, about a second per resume on CPU).
     vectors = await embed_documents(ollama, [d.text for d in drafts], settings.embed_model, settings.embed_batch_size)
 
-    # 4. Vectors -> ChromaDB (first: if this fails, the database still says EMBEDDING and the stage is retried).
+    # 4. Vectors -> the vector store (first: if this fails, the database still says EMBEDDING and the stage is retried).
     ids = [str(uuid.uuid4()) for _ in drafts]
     # ChromaDB metadata must be plain str/int/float/bool values (no None, no lists).
     metadatas = [
@@ -76,15 +75,13 @@ async def index_resume(resume_id: int, ollama: OllamaClient, settings: Settings)
          **{k: v for k, v in d.meta.items() if isinstance(v, (str, int, float, bool))}}
         for i, d in enumerate(drafts)
     ]
-    await asyncio.to_thread(
-        get_vector_store().replace_resume, resume_id, ids, vectors, [d.text for d in drafts], metadatas
-    )
+    await get_vector_store().replace_resume(resume_id, ids, vectors, [d.text for d in drafts], metadatas)
 
     # 5. Chunk rows + keyword index -> SQLite, and mark the resume READY, in one transaction.
     async with SessionLocal() as session:
         resume = await session.get(Resume, resume_id)
         if resume is None:                                   # deleted meanwhile: undo the vectors
-            await asyncio.to_thread(get_vector_store().delete_resume, resume_id)
+            await get_vector_store().delete_resume(resume_id)
             return False
         await session.execute(delete(ResumeChunk).where(ResumeChunk.resume_id == resume_id))
         session.add_all(
@@ -97,6 +94,7 @@ async def index_resume(resume_id: int, ollama: OllamaClient, settings: Settings)
         resume.attempts = 0
         resume.error_message = None
         resume.processed_at = func.now()
+        resume.lease_expires_at = None      # the stage is done: the worker's claim ends
         await session.commit()
     logger.info("Resume %s indexed: %d chunks", resume_id, len(drafts))
     return True

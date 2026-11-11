@@ -11,8 +11,9 @@ from app.db.models.project import Project, ProjectRole
 from app.db.models.resume import Experience, Resume, ResumeChunk, ResumeProfile, ResumeProject
 from app.db.models.skill import ResumeSkill, Skill
 from app.db.models.user import User
+from app.db.models.worker import WorkerHeartbeat
 
 __all__ = [
     "AgentConversation", "AgentMessage", "Employee", "Experience", "Feedback", "MatchResult", "MatchRun", "Project", "ProjectRole",
-    "Resume", "ResumeChunk", "ResumeProfile", "ResumeProject", "ResumeSkill", "Skill", "User",
+    "Resume", "ResumeChunk", "ResumeProfile", "ResumeProject", "ResumeSkill", "Skill", "User", "WorkerHeartbeat",
 ]

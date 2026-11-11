@@ -1,0 +1,7 @@
+# For running the tests (tests/README.md):  pip install -r requirements.txt -r requirements-cloud.txt -r requirements-dev.txt
+pytest>=8.3
+pytest-asyncio>=0.25
+moto[s3,sqs,kms]>=5.0          # AWS S3 / SQS / KMS emulated in-process (no AWS account needed)
+python-docx>=1.1               # already in requirements.txt; listed for clarity (test resumes are made with it)
+google-cloud-pubsub>=2.25      # only to import the Pub/Sub adapter in its tests
+azure-servicebus>=7.12         # only to import the Service Bus adapter in its tests

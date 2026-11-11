@@ -347,10 +347,7 @@ async def retrieve_candidates(
     # ③ Vector (meaning)
     if "vector" in signals:
         vec = await embed_query(ollama, vector_query(requirements), settings.embed_model)
-        chunk_hits = await asyncio.to_thread(
-            get_vector_store().query, vec, settings.retrieval_vector_pool,
-            {"employee_id": {"$in": employee_ids}} if len(employee_ids) > 1 else {"employee_id": employee_ids[0]},
-        )
+        chunk_hits = await get_vector_store().query(vec, settings.retrieval_vector_pool, employee_ids)
         order = []
         for hit in chunk_hits:
             cand = candidates.get(hit.employee_id)

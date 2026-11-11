@@ -1,7 +1,7 @@
 """
 Business logic for resumes: adding an uploaded file, deleting, retrying.
 """
-import asyncio
+import logging
 import re
 from pathlib import Path
 
@@ -11,9 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings
 from app.db.enums import ResumeStatus
 from app.db.models import Employee, Resume
-from app.ingestion.storage import build_storage_path, delete_file, save_file, validate_resume_file
+from app.ingestion.storage import storage_key, validate_resume_file
 from app.rag.keyword_index import delete_resume_rows
 from app.rag.vector_store import get_vector_store
+from app.storage import StorageError, get_storage
+
+logger = logging.getLogger(__name__)
 
 
 class DuplicateResumeError(Exception):
@@ -40,8 +43,9 @@ async def add_resume(
         select(Resume.id).where(Resume.employee_id == employee.id, Resume.is_current.is_(True))
     )).all())
 
-    path = build_storage_path(Path(settings.upload_dir), employee.employee_code, file)
-    save_file(path, data)
+    key = storage_key(employee.employee_code, file)
+    storage = get_storage()
+    await storage.put(key, data, file.mime_type)        # the file first: a row never points at nothing
     try:
         # Older versions stay as history but are no longer searched.
         await session.execute(
@@ -52,7 +56,7 @@ async def add_resume(
         resume = Resume(
             employee_id=employee.id,
             original_filename=Path(filename).name[:255],
-            stored_path=path.as_posix(),
+            stored_path=key,                        # the storage key (app/storage)
             file_hash=file.sha256,
             mime_type=file.mime_type,
             file_size_bytes=file.size_bytes,
@@ -65,13 +69,15 @@ async def add_resume(
     except Exception:
         # The database didn't accept it: don't leave an orphan file behind.
         await session.rollback()
-        delete_file(path)
+        # Same file uploaded twice at the same moment: the other upload owns this key now, keep the file.
+        if await session.scalar(select(Resume.id).where(Resume.file_hash == file.sha256)) is None:
+            await _delete_file(key)
         raise
     await session.refresh(resume)  # load the values the database filled in (created_at, ...)
 
     # The old version is no longer current: remove it from both search indexes.
     for old_id in previous_ids:
-        await asyncio.to_thread(get_vector_store().delete_resume, old_id)
+        await get_vector_store().delete_resume(old_id)
         await delete_resume_rows(session, old_id)
     if previous_ids:
         await session.commit()
@@ -124,7 +130,7 @@ def match_employee_by_filename(filename: str, employees: list[Employee]) -> tupl
 
 async def delete_resume(session: AsyncSession, resume: Resume) -> None:
     """Delete one resume version: database rows (cascade) + the file. Promote the newest remaining version."""
-    resume_id, employee_id, was_current, path = resume.id, resume.employee_id, resume.is_current, resume.stored_path
+    resume_id, employee_id, was_current, key = resume.id, resume.employee_id, resume.is_current, resume.stored_path
     await delete_resume_rows(session, resume_id)   # keyword index (not covered by CASCADE)
     await session.delete(resume)   # cascades to profile, skills, chunks... (Steps 5-6)
     await session.flush()
@@ -137,8 +143,17 @@ async def delete_resume(session: AsyncSession, resume: Resume) -> None:
             if newest.status == ResumeStatus.READY:
                 newest.status = ResumeStatus.EXTRACTED   # its vectors were removed earlier: re-index it
     await session.commit()
-    delete_file(path)
-    await asyncio.to_thread(get_vector_store().delete_resume, resume_id)
+    await _delete_file(key)
+    await get_vector_store().delete_resume(resume_id)
+
+
+async def _delete_file(key: str) -> None:
+    """Remove a stored file. A failure is logged, not raised: the database change already happened, and an
+    orphaned file is harmless (scripts/migrate_files.py --check lists them)."""
+    try:
+        await get_storage().delete(key)
+    except StorageError as exc:
+        logger.warning("Could not delete stored file %s: %s", key, exc)
 
 
 async def retry_resume(session: AsyncSession, resume: Resume) -> Resume:

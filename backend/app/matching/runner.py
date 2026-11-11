@@ -175,8 +175,7 @@ async def judge_run(run_id: int, ollama: OllamaClient, settings: Settings) -> No
             run.status, run.finished_at = MatchRunStatus.COMPLETED, _now()
             await session.commit()
     except asyncio.CancelledError:
-        await _fail(run_id, "Stopped because the server shut down; start a new run.")
-        raise
+        raise                       # the worker is stopping: it releases the run and another worker continues
     except Exception as exc:                                    # never leave a run stuck in RUNNING
         logger.exception("Run %s failed", run_id)
         await _fail(run_id, f"{type(exc).__name__}: {exc}")
@@ -187,15 +186,3 @@ async def _fail(run_id: int, message: str) -> None:
         await session.execute(update(MatchRun).where(MatchRun.id == run_id)
                               .values(status=MatchRunStatus.FAILED, error_message=message, finished_at=_now()))
         await session.commit()
-
-
-async def recover_interrupted_runs() -> int:
-    """At startup: runs still RUNNING were interrupted by a stop/crash. Mark them FAILED (clearly, not silently)."""
-    async with SessionLocal() as session:
-        result = await session.execute(
-            update(MatchRun).where(MatchRun.status == MatchRunStatus.RUNNING)
-            .values(status=MatchRunStatus.FAILED, error_message="Interrupted by a server restart; start a new run.",
-                    finished_at=_now())
-        )
-        await session.commit()
-        return result.rowcount

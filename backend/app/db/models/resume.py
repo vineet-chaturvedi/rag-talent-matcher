@@ -38,6 +38,9 @@ class Resume(TimestampMixin, Base):
     raw_text: Mapped[str | None] = mapped_column(Text)  # text extracted from the file
     page_count: Mapped[int | None]
     processed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # Held by the worker processing it (Step 15, app/jobs/leases.py): until then no other worker takes it; if the
+    # worker dies, the lease runs out and the resume goes back to the queue.
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
 
     uploaded_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
 
@@ -47,7 +50,8 @@ class Resume(TimestampMixin, Base):
         back_populates="resume", cascade="all, delete-orphan"
     )
     experiences: Mapped[list["Experience"]] = relationship(
-        back_populates="resume", cascade="all, delete-orphan", order_by="Experience.start_date.desc()"
+        back_populates="resume", cascade="all, delete-orphan",
+        order_by=lambda: Experience.start_date.desc().nulls_last(),   # NULLs last on SQLite AND PostgreSQL
     )
     skills: Mapped[list["ResumeSkill"]] = relationship(back_populates="resume", cascade="all, delete-orphan")
     projects: Mapped[list["ResumeProject"]] = relationship(

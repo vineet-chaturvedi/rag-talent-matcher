@@ -15,6 +15,15 @@ from app.db.enums import MatchRunStatus, ProjectStatus, RoleStatus
 class DatabaseHealth(BaseModel):
     reachable: bool
     error: str | None = None
+    backend: str | None = None            # "sqlite" | "postgresql"
+    vector_store: str | None = None       # "chroma" | "pgvector"
+
+
+class InfrastructureHealth(BaseModel):
+    """Where things run (Step 15): shown on the dashboard, so it's clear which setup this is."""
+    file_storage: str                     # e.g. "folder /app/data/uploads", "s3://bucket/resumes/"
+    job_queue: str                        # e.g. "database (no broker)", "Amazon SQS https://..."
+    workers_online: int                   # background worker processes alive in the last 90 s
 
 
 class ModelHealth(BaseModel):
@@ -37,6 +46,7 @@ class HealthOut(BaseModel):
     status: Literal["ok", "degraded", "error"]
     database: DatabaseHealth
     ollama: OllamaHealth
+    infrastructure: InfrastructureHealth | None = None
 
 
 # --------------------------------------------------------------------------- GET /api/overview

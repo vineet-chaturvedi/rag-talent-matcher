@@ -1,7 +1,15 @@
 # Optional: only needed when a model setting uses a cloud provider (doc 20, app/llm/router.py).
-#   openai/, azure/, gemini/ (chat), compat/  -> the OpenAI SDK
-#   anthropic/                                -> the Anthropic SDK
-#   voyage/, cohere/, gemini/ (embeddings)    -> nothing extra (plain HTTP with httpx)
-# Install:  pip install -r requirements-cloud.txt
+#   openai/, azure/, gemini/ (chat), compat/, vertex/ (Gemini, Llama ...)  -> the OpenAI SDK
+#   anthropic/, vertex/claude-*                                          -> the Anthropic SDK (+ google-auth)
+#   bedrock/                                                             -> boto3
+#   vertex/                                                              -> google-auth (credentials)
+#   voyage/, cohere/, gemini/ (embeddings)                               -> nothing extra (plain HTTP with httpx)
+#   STORAGE_BACKEND=s3 -> boto3 · gcs -> google-cloud-storage · azure -> azure-storage-blob + azure-identity
+# Install:  pip install -r requirements-cloud.txt   (or only the lines you need)
 openai>=1.50
-anthropic>=0.40
+anthropic[vertex]>=0.40
+boto3>=1.40                  # Bedrock Converse; structured output (outputConfig) needs a recent botocore
+google-auth[requests]>=2.30
+google-cloud-storage>=2.18
+azure-storage-blob>=12.20
+azure-identity>=1.17

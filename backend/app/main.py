@@ -1,7 +1,6 @@
 """
 Entry point. Run with:   uvicorn app.main:app --reload --port 8010
 """
-import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -14,12 +13,13 @@ from app.auth.dependencies import get_current_user, require_admin
 from app.config import get_settings
 from app.db.session import engine, init_db
 from app.services.users import count_users
-from app.ingestion.worker import IngestionWorker
+from app.jobs import dispatch_waiting, get_queue
+from app.jobs.worker import Worker
 from app.llm.router import make_model_client
-from app.matching.runner import recover_interrupted_runs
 from app.rag.keyword_index import ensure_keyword_index
 from app.rag.vector_store import get_vector_store
 from app.services.indexing import requeue_for_embedding
+from app.storage import get_storage
 
 settings = get_settings()
 
@@ -34,26 +34,28 @@ logger = logging.getLogger("app")
 async def lifespan(app: FastAPI):
     # ---- startup ----
     await init_db()
-    logger.info("Database ready (%s)", settings.database_url)
+    logger.info("Database ready (%s, schema up to date)", engine.url.render_as_string(hide_password=True))
     # One client for every model of every provider (app/llm/router.py). Named "ollama" for history's sake.
     app.state.ollama = make_model_client(settings)
     if cloud := app.state.ollama.cloud_models_in_use():
         state = "ALLOWED" if settings.allow_cloud_models else "BLOCKED until ALLOW_CLOUD_MODELS=true"
         logger.warning("Cloud models configured (%s): %s. They receive resume text and role descriptions.",
                        state, ", ".join(cloud))
-    store = get_vector_store()   # opens (or creates) data/chroma, the collection of the current EMBED_MODEL
-    logger.info("Vector store ready (%s, collection %s): %d chunks", settings.chroma_dir,
-                settings.vector_collection, store.count())
+    logger.info("Resume files: %s", get_storage().describe())
+    store = get_vector_store()   # the collection of the current embedding model (Chroma or pgvector)
+    logger.info("Vector store ready (%s, collection %s): %d chunks", store.name, settings.vector_collection,
+                await store.count())
     logger.info("Models: %s", ", ".join(f"{k}={v}" for k, v in settings.models_in_use.items()))
-    if settings.auto_reembed_on_model_change and (
-            stale := await requeue_for_embedding(settings.embedding_signature)):
+    stale = await requeue_for_embedding(settings.embedding_signature) if settings.auto_reembed_on_model_change else 0
+    if stale:
         logger.warning("Embeddings are now made with %s: %d resume(s) were embedded with another model or size "
                        "and are queued for re-embedding (the worker does it in the background).",
                        settings.embedding_signature, stale)
-    await ensure_keyword_index()  # SQLite FTS5 table for keyword (BM25) search, rebuilt if out of sync
-    if interrupted := await recover_interrupted_runs():
-        logger.warning("%d match run(s) were interrupted by the last shutdown and marked failed", interrupted)
-    app.state.match_tasks = set()   # background LLM-judge tasks (Step 8)
+    await ensure_keyword_index()  # keyword (BM25) search: SQLite FTS5 table rebuilt if out of sync; PG: checked
+    app.state.jobs = get_queue()  # background jobs: resumes and the LLM judge (app/jobs, QUEUE_BACKEND)
+    logger.info("Background jobs: %s", app.state.jobs.describe())
+    if stale:
+        await dispatch_waiting(app.state.jobs)
     if not settings.jwt_secret:
         logger.warning("JWT_SECRET is not set: using a random development secret, so logins end when the "
                        "server restarts. Add JWT_SECRET to .env (see .env.example).")
@@ -62,19 +64,20 @@ async def lifespan(app: FastAPI):
         logger.warning("No portal users yet. Create the first admin:  python -m scripts.create_user --role admin")
 
     app.state.worker = None
-    if settings.worker_enabled:
-        app.state.worker = IngestionWorker(settings, app.state.ollama)
+    if settings.worker_enabled:                 # a worker inside this process (one machine, development)
+        app.state.worker = Worker(settings, app.state.ollama, app.state.jobs)
         app.state.worker.start()
+    else:
+        logger.info("No worker in this process (WORKER_ENABLED=false): run `python -m app.worker` separately")
 
     logger.info("Started %s (%s) | Ollama at %s", settings.app_name, settings.environment, settings.ollama_base_url)
     yield
     # ---- shutdown ----
-    for task in list(app.state.match_tasks):   # stop judging; those runs are marked failed
-        task.cancel()
-    await asyncio.gather(*app.state.match_tasks, return_exceptions=True)
-    if app.state.worker is not None:
+    if app.state.worker is not None:            # graceful: running jobs finish or are handed back, never lost
         await app.state.worker.stop()
+    await app.state.jobs.close()
     await app.state.ollama.close()
+    await get_storage().close()
     await engine.dispose()
     logger.info("Shutdown complete")
 
