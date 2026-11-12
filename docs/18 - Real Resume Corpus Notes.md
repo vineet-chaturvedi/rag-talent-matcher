@@ -419,3 +419,5 @@ All 15 problems except P13 (not a problem) are fixed in code; see doc 09, sectio
 `python -m scripts.evaluate_real_resumes --offline` (the code alone, fed a correct model answer): **107 of 107 checks pass**. The 16 checks of the original Step 5 test (`compare_extraction`) still pass.
 The run with the real model on the PC is the next step (action item 19).
 
+**Missing time periods (2026-11-05, second round):** the evidence ladder (doc 09, 13.6) gives every skill its best-supported duration and says how it was found: dated jobs, project durations, stated, or estimated for the core skills of undated resumes (Ravi: React Native ≈ 5 y; Mahesh: Node.js ≈ 6 y). It also handles levels ("familiar with", "proficient"), "currently learning", certified-only skills, one duration shared by several skills, and caps every skill at the length of the career. Offline: **151/151 checks** (the 9 resumes plus a synthetic one for the cases they don't contain).
+
