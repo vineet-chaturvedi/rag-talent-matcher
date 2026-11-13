@@ -1,0 +1,60 @@
+# The server version of docker-compose.yml (doc 22): one EC2 instance, models on Amazon Bedrock.
+# Compose combines the two files; this one only lists what is DIFFERENT on the server:
+#   docker compose -f docker-compose.yml -f docker-compose.aws.yml up -d
+#
+#   - images come from ECR (built on your PC and pushed), the server never builds
+#   - only the portal is published, on port 80; PostgreSQL and the API are reachable only inside Docker
+#   - LLMs and embeddings on Bedrock; AWS credentials come from the instance's IAM role (no keys anywhere)
+#   - container logs are rotated so they can't fill the disk
+#
+# Settings: the server's .env (copy of .env.aws.example). Needs Docker Compose 2.24.4 or newer (!reset).
+
+x-aws-backend-environment: &aws-backend-environment
+  ALLOW_CLOUD_MODELS: "true"                 # resume text goes to Bedrock (stays in the AWS region)
+  FAST_LLM_MODEL: ${FAST_LLM_MODEL:?Set FAST_LLM_MODEL in .env}
+  QUALITY_LLM_MODEL: ${QUALITY_LLM_MODEL:?Set QUALITY_LLM_MODEL in .env}
+  EMBED_MODEL: ${EMBED_MODEL:?Set EMBED_MODEL in .env}
+  EMBED_DIMENSIONS: ${EMBED_DIMENSIONS:-1024}
+  AWS_REGION: ${AWS_REGION:?Set AWS_REGION in .env}
+  CORS_ORIGINS: "[]"                         # browsers only talk to the portal, never to the API directly
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"                          # each container keeps at most 3 x 10 MB of logs
+    max-file: "3"
+
+x-aws-backend: &aws-backend
+  image: ${REGISTRY:?Set REGISTRY in .env}/rag-backend:${IMAGE_TAG:?Set IMAGE_TAG in .env}
+  build: !reset null                         # never build on the server: pull the image from ECR
+  pull_policy: missing                       # pull a tag once; a new release uses a new tag
+  extra_hosts: !reset []                     # no Ollama on the server
+  logging: *logging
+
+services:
+  postgres:
+    ports: !reset []                         # not published: only the containers can reach it
+    logging: *logging
+
+  migrate:
+    <<: *aws-backend
+    environment: *aws-backend-environment
+
+  api:
+    <<: *aws-backend
+    ports: !reset []                         # not published: the portal reaches it as http://api:8010
+    environment: *aws-backend-environment
+
+  worker:
+    <<: *aws-backend
+    environment:
+      <<: *aws-backend-environment
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}   # Bedrock serves several requests at once
+
+  frontend:
+    image: ${REGISTRY:?Set REGISTRY in .env}/rag-frontend:${IMAGE_TAG:?Set IMAGE_TAG in .env}
+    build: !reset null
+    pull_policy: missing
+    ports: !override
+      - "80:3000"                            # the ONLY published port; the security group allows your IP only
+    logging: *logging
