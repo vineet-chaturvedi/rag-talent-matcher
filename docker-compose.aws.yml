@@ -17,6 +17,11 @@ x-aws-backend-environment: &aws-backend-environment
   EMBED_DIMENSIONS: ${EMBED_DIMENSIONS:-1024}
   AWS_REGION: ${AWS_REGION:?Set AWS_REGION in .env}
   CORS_ORIGINS: "[]"                         # browsers only talk to the portal, never to the API directly
+  # AWS credentials. On EC2 these stay unset and the SDK uses the instance's IAM role. For a test run on a PC,
+  # temporary credentials exported into the shell are passed through (doc 22, Phase 2). Never put keys in .env.
+  AWS_ACCESS_KEY_ID:
+  AWS_SECRET_ACCESS_KEY:
+  AWS_SESSION_TOKEN:
 
 x-logging: &logging
   driver: json-file

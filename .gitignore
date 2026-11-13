@@ -22,4 +22,5 @@ backend/evaluation/reports/
 
 # ---- Step 15: Docker Compose settings (database password, JWT secret) and test caches ----
 /.env
+/.env.awstest
 .pytest_cache/
